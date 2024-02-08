@@ -112,6 +112,10 @@ void core_dprint(double *A,
 
 void core_dcmg_nono_stat(double *A, int m, int n, 
         int m0, int n0, location  *l1,
-        location *l2, location *lm, double *localtheta,
-        int distance_metric);
+	location *l2, location *lm, double *localtheta,
+	int distance_metric);
+
+void core_dcmg_mean_trend (double *A, int m, int n,
+		int m0, int n0, location  *l1,
+		location *l2, double *localtheta_T_M_forcing,  int distance_metric);
 #endif

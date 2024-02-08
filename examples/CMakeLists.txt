@@ -2,7 +2,7 @@ cmake_policy(SET CMP0057 NEW)
 
 set( tests_files synthetic_dmle_test.c   synthetic_smle_test.c synthetic_sdmle_test.c
 	 synthetic_dmle_locs_rwrapper_test.c synthetic_dmle_rwrapper_test.c real_csv_dmle_test.c
-	 real_csv_smle_test.c real_csv_sdmle_test.c)
+	 real_csv_smle_test.c real_csv_sdmle_test.c synthetic_dmle_mean_trend.c)
 
 if(EXAGEOSTAT_USE_NETCDF)
 	list(APPEND tests_files real_nc_dmle_1dlocs_test.c real_nc_dmle_2dlocs_test.c real_nc_sdmle_2dlocs_test.c real_nc_sdmle_1dlocs_test.c)

@@ -138,17 +138,20 @@ double MLE_alg(unsigned n, const double * theta, double * grad, void * data)
 {
     char *computation	= ((MLE_data*)data)->computation;
     int async		= ((MLE_data*)data)->async;
-    int precision         = ((MLE_data*)data)->precision;
+    int precision       = ((MLE_data*)data)->precision;
+    int mean_trend      = ((MLE_data*)data)->mean_trend;
 
-    //printf("Precision: %d,\n", precision);
-    // printf("%s - %s\n", computation, __func__);
-
+    //printf("mean_trend: %d,\n", mean_trend);
+     //printf("%s - %s\n", computation, __func__);
+    
     if (precision == 0 ){
         if(strcmp (computation, "exact") == 0)
         {
-            if(async == 0)
+            if(async == 0 && mean_trend ==0)
                 return MORSE_dmle_Tile(n, theta,  grad,  data);
-            else
+	    else if(async == 0 && mean_trend ==1)
+		    return MLE_alg_mean_trend(n, theta,  grad,  data);
+	    else
                 return MORSE_dmle_Tile_Async(n, theta,  grad,  data);
         }
         else if (strcmp (computation, "diag_approx") == 0)

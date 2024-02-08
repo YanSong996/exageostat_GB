@@ -337,6 +337,18 @@ typedef struct
     char* checkpoint_file;
     int time_slots;
     int idw;
+    int mean_trend;
+    int M;
+    void *X;
+    void *part2_vector;
+    void *XtX;
+    double *forcing;    
+    int T;
+    int no_years;
+    void*  descpart1;
+    void* descpart2;
+    double part1;
+    double part2;
 } MLE_data;
 
 

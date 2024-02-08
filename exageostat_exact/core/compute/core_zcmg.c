@@ -156,7 +156,60 @@ void core_dcmg (double *A, int m, int n,
 
 }
 
+void core_dcmg_mean_trend (double *A, int m, int n,
+		       int m0, int n0, location  *l1,
+        location *l2, double *localtheta_T_M_forcing,  int distance_metric) {
 
+    int i, j;
+    int i0 = m0;
+    int j0 = n0;
+    int T = (int)localtheta_T_M_forcing[1];
+    int M = (int)localtheta_T_M_forcing[2];
+    double * forcing = &localtheta_T_M_forcing[3];
+
+    double i_x =i0+1;
+    int ty;
+    double theta_pow=1.0;
+    double sum=0.0;
+
+    for (i = 0; i < m; i++) {
+	    j0 = n0;
+	    for (j = 0; j < n; j++) {
+		    if( j0==0 /* I am at the first local col*/)
+			    A[i + j * m] = 1; 			
+		    else  if( j0==1 /* I am at the second local col*/)
+		    {
+			    A[i + j * m] = forcing[((i0+1)/T)+190];
+		    }
+		    else if(j0==2)
+		    {
+			    ty = (i0+1)/T;
+
+			    for(int k=0;k<ty+190;k++){
+				    for(int kk=k;kk<ty+190;kk++)
+					    theta_pow *= localtheta_T_M_forcing[0];
+				   // fprintf(stderr, "%f\n", theta_pow);
+				    sum+=theta_pow*forcing[k];
+				    theta_pow = 1;
+			    }
+			    A[i + j * m] =(1-localtheta_T_M_forcing[0])*sum;
+			    sum = 0;
+			    theta_pow = 1;			    
+		    }
+		    else
+		    {
+			    if(j%2==0)
+				    A[i + j * m]=sin(2.0 * PI * (i_x) * ((j0-3)/2+1) / (24.0*365.0));
+			    else
+				    A[i + j * m]=cos(2.0 * PI * (i_x) * ((j0-3)/2+1) / (24.0*365.0));
+		    }
+		    j0++;
+	    }
+	    i0++;
+	    i_x++;
+    }
+
+}
 /***************************************************************************//**
  *
  *  core_scmg - Calculate covariance matrix A - single precision.
@@ -196,35 +249,35 @@ void core_dcmg (double *A, int m, int n,
  *
  ******************************************************************************/
 void core_scmg (float *A, int m, int n,
-        int m0, int n0, location  *l1,
-        location *l2, double *localtheta, int distance_metric) {
+		int m0, int n0, location  *l1,
+		location *l2, double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    float x0, y0, z0;
-    float expr = 0.0;
-    float con = 0.0;
-    float sigma_square = localtheta[0];// * localtheta[0];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	float x0, y0, z0;
+	float expr = 0.0;
+	float con = 0.0;
+	float sigma_square = localtheta[0];// * localtheta[0];
 
-    con = pow(2,(localtheta[2]-1)) * tgamma(localtheta[2]);
-    con = 1.0/con;
-    con = sigma_square * con;
+	con = pow(2,(localtheta[2]-1)) * tgamma(localtheta[2]);
+	con = 1.0/con;
+	con = sigma_square * con;
 
 
-    for (i = 0; i < m; i++) {
-        j0 = n0;
-        for (j = 0; j < n; j++) {
-            expr = calculateDistance(l1, l2, i0, j0, distance_metric, 0) / localtheta[1];
-            if(expr == 0)
-                A[i + j * m] = sigma_square /*+ 1e-4*/;
-            else
-                A[i + j * m] = con*pow(expr, localtheta[2])
-                    * gsl_sf_bessel_Knu(localtheta[2],expr); // Matern Function
-            j0++;
-        }
-        i0++;
-    }
+	for (i = 0; i < m; i++) {
+		j0 = n0;
+		for (j = 0; j < n; j++) {
+			expr = calculateDistance(l1, l2, i0, j0, distance_metric, 0) / localtheta[1];
+			if(expr == 0)
+				A[i + j * m] = sigma_square /*+ 1e-4*/;
+			else
+				A[i + j * m] = con*pow(expr, localtheta[2])
+					* gsl_sf_bessel_Knu(localtheta[2],expr); // Matern Function
+			j0++;
+		}
+		i0++;
+	}
 }
 
 
@@ -234,35 +287,35 @@ void core_scmg (float *A, int m, int n,
 
 
 void core_sdcmg (double *A, int m, int n, 
-        int m0, int n0, location  *l1,
-        location *l2, double *localtheta, int distance_metric) {
+		int m0, int n0, location  *l1,
+		location *l2, double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    double x0, y0, z0;
-    double expr = 0.0;
-    double con = 0.0;
-    double sigma_square = localtheta[0];// * localtheta[0];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	double x0, y0, z0;
+	double expr = 0.0;
+	double con = 0.0;
+	double sigma_square = localtheta[0];// * localtheta[0];
 
-    con = pow(2,(localtheta[2]-1)) * tgamma(localtheta[2]);
-    con = 1.0/con;
-    con = sigma_square * con;
+	con = pow(2,(localtheta[2]-1)) * tgamma(localtheta[2]);
+	con = 1.0/con;
+	con = sigma_square * con;
 
 
-    for (i = 0; i < m; i++) {
-        j0 = n0;
-        for (j = 0; j < n; j++) {
-            expr = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/localtheta[1];
-            if(expr == 0)
-                A[i + j * m] = (float)(sigma_square /*+ 1e-4*/);
-            else
-                A[i + j * m] = (float)(con*pow(expr, localtheta[2])
-                        * gsl_sf_bessel_Knu(localtheta[2],expr)); // Matern Function
-            j0++;
-        }
-        i0++;
-    }
+	for (i = 0; i < m; i++) {
+		j0 = n0;
+		for (j = 0; j < n; j++) {
+			expr = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/localtheta[1];
+			if(expr == 0)
+				A[i + j * m] = (float)(sigma_square /*+ 1e-4*/);
+			else
+				A[i + j * m] = (float)(con*pow(expr, localtheta[2])
+						* gsl_sf_bessel_Knu(localtheta[2],expr)); // Matern Function
+			j0++;
+		}
+		i0++;
+	}
 
 }
 
@@ -308,41 +361,41 @@ void core_sdcmg (double *A, int m, int n,
  *
  ******************************************************************************/
 void core_dcmg_spacetime_matern (double *A, int m, int n,
-        int m0, int n0, location  *l1,
-        location *l2, double *localtheta, int distance_metric) {
+		int m0, int n0, location  *l1,
+		location *l2, double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    double x0, y0, z0, z1;
-    double expr = 0.0, expr1 = 0.0, expr2 = 0.0, expr3 = 0.0, expr4 = 0.0;
-    double con = 0.0;
-    double sigma_square = localtheta[0];// * localtheta[0];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	double x0, y0, z0, z1;
+	double expr = 0.0, expr1 = 0.0, expr2 = 0.0, expr3 = 0.0, expr4 = 0.0;
+	double con = 0.0;
+	double sigma_square = localtheta[0];// * localtheta[0];
 
-    con = pow(2,(localtheta[2]-1)) * tgamma(localtheta[2]);
-    con = 1.0/con;
-    con = sigma_square * con;
+	con = pow(2,(localtheta[2]-1)) * tgamma(localtheta[2]);
+	con = 1.0/con;
+	con = sigma_square * con;
 
-    for (i = 0; i < m; i++) {
-        j0 = n0;
-        z0 = l1->z[i0];
-        for (j = 0; j < n; j++) {
-            z1 = l2->z[j0];
-            expr = calculateDistance(l1, l2, i0, j0, distance_metric, 1)/localtheta[1];
-            expr2 = pow(pow(sqrt(pow(z0 - z1, 2)), 2 * localtheta[4])/localtheta[3] + 1, localtheta[5] / 2);
-            expr3 = expr / expr2;
-            expr4 = pow(pow(sqrt(pow(z0 - z1, 2)), 2 * localtheta[4]) / localtheta[3] + 1, localtheta[5] + localtheta[6]);
+	for (i = 0; i < m; i++) {
+		j0 = n0;
+		z0 = l1->z[i0];
+		for (j = 0; j < n; j++) {
+			z1 = l2->z[j0];
+			expr = calculateDistance(l1, l2, i0, j0, distance_metric, 1)/localtheta[1];
+			expr2 = pow(pow(sqrt(pow(z0 - z1, 2)), 2 * localtheta[4])/localtheta[3] + 1, localtheta[5] / 2);
+			expr3 = expr / expr2;
+			expr4 = pow(pow(sqrt(pow(z0 - z1, 2)), 2 * localtheta[4]) / localtheta[3] + 1, localtheta[5] + localtheta[6]);
 
-            if(expr == 0)
-                A[i + j * m] = sigma_square / expr4 /*+ 1e-4*/;
-            else
-                A[i + j * m] = con*pow(expr3, localtheta[2])
-                    * gsl_sf_bessel_Knu(localtheta[2],expr3) / expr4; // Matern Function
-            //printf("%f,%f,%f,%f,%f\n", calculateDistance(l1, l2, i0, j0, distance_metric, 1), z0, z1, sqrt(pow(z0 - z1, 2)), A[i + j * m]);
-            j0++;
-        }
-        i0++;
-    }
+			if(expr == 0)
+				A[i + j * m] = sigma_square / expr4 /*+ 1e-4*/;
+			else
+				A[i + j * m] = con*pow(expr3, localtheta[2])
+					* gsl_sf_bessel_Knu(localtheta[2],expr3) / expr4; // Matern Function
+			//printf("%f,%f,%f,%f,%f\n", calculateDistance(l1, l2, i0, j0, distance_metric, 1), z0, z1, sqrt(pow(z0 - z1, 2)), A[i + j * m]);
+			j0++;
+		}
+		i0++;
+	}
 
 }
 
@@ -401,68 +454,68 @@ void core_dcmg_spacetime_matern (double *A, int m, int n,
  ******************************************************************************/
 
 void core_dcmg_bivariate_flexible (double *A, int m, int n,
-        int m0, int n0, location  *l1,
-        location *l2, double *localtheta, int distance_metric) {
+		int m0, int n0, location  *l1,
+		location *l2, double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    double x0, y0;
-    double expr1 = 0.0, expr2 = 0.0, expr12 = 0.0;
-    double con1 = 0.0, con2 = 0.0, con12 = 0.0, scale12 = 0.0, rho = 0.0, nu12 = 0.0;
-    double scale1 = localtheta[0], scale2 = localtheta[1], nu1 = localtheta[4], nu2 = localtheta[5];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	double x0, y0;
+	double expr1 = 0.0, expr2 = 0.0, expr12 = 0.0;
+	double con1 = 0.0, con2 = 0.0, con12 = 0.0, scale12 = 0.0, rho = 0.0, nu12 = 0.0;
+	double scale1 = localtheta[0], scale2 = localtheta[1], nu1 = localtheta[4], nu2 = localtheta[5];
 
-    scale12 =  pow(0.5 * (pow(scale1, -2) + pow(scale2, -2)) + localtheta[2] * (1 - localtheta[3]), -0.5) ;
+	scale12 =  pow(0.5 * (pow(scale1, -2) + pow(scale2, -2)) + localtheta[2] * (1 - localtheta[3]), -0.5) ;
 
-    nu12 = 0.5 * (nu1 + nu2) + localtheta[6] * (1 - localtheta[7]) ;
+	nu12 = 0.5 * (nu1 + nu2) + localtheta[6] * (1 - localtheta[7]) ;
 
-    rho = localtheta[8] * localtheta[9] * localtheta[10] * 
-        pow(scale12,  2 * localtheta[6] + (nu1 + nu2))
-        * tgamma(0.5 * (nu1 + nu2) + 1) * tgamma(nu12) / tgamma(nu12 + 1);
+	rho = localtheta[8] * localtheta[9] * localtheta[10] * 
+		pow(scale12,  2 * localtheta[6] + (nu1 + nu2))
+		* tgamma(0.5 * (nu1 + nu2) + 1) * tgamma(nu12) / tgamma(nu12 + 1);
 
-    localtheta[0] = localtheta[8] * localtheta[8] * 
-        pow(scale1, 2*localtheta[6] + nu1 + nu1) * tgamma(nu1);
+	localtheta[0] = localtheta[8] * localtheta[8] * 
+		pow(scale1, 2*localtheta[6] + nu1 + nu1) * tgamma(nu1);
 
-    localtheta[1] = localtheta[9] * localtheta[9] *  
-        pow(scale2, 2*localtheta[6] + nu2 + nu2) * tgamma(nu2);
+	localtheta[1] = localtheta[9] * localtheta[9] *  
+		pow(scale2, 2*localtheta[6] + nu2 + nu2) * tgamma(nu2);
 
-    con1 = pow(2,(nu1-1)) * tgamma(nu1);
-    con1 = 1.0/con1;
-    con1 = localtheta[0] * con1;
+	con1 = pow(2,(nu1-1)) * tgamma(nu1);
+	con1 = 1.0/con1;
+	con1 = localtheta[0] * con1;
 
-    con2 = pow(2,(nu2-1)) * tgamma(nu2);
-    con2 = 1.0/con2;
-    con2 = localtheta[1] * con2;    
+	con2 = pow(2,(nu2-1)) * tgamma(nu2);
+	con2 = 1.0/con2;
+	con2 = localtheta[1] * con2;    
 
-    con12 = pow(2,(nu12-1)) * tgamma(nu12);
-    con12 = 1.0/con12;
-    con12 = rho * con12;    
+	con12 = pow(2,(nu12-1)) * tgamma(nu12);
+	con12 = 1.0/con12;
+	con12 = rho * con12;    
 
-    i0/=2;
-    for (i = 0; i < m; i+=2) {
-        j0 = n0/2;
-        for (j = 0; j < n; j+=2) {
-            expr1  = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/scale1;
-            expr2  = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/scale2;
-            expr12 = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/scale12;
+	i0/=2;
+	for (i = 0; i < m; i+=2) {
+		j0 = n0/2;
+		for (j = 0; j < n; j+=2) {
+			expr1  = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/scale1;
+			expr2  = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/scale2;
+			expr12 = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/scale12;
 
-            if(expr1 == 0){
-                A[i + j * m] = localtheta[0] ;
-                A[(i + 1) + j * m] = A[i + (j + 1) * m] = rho;
-                A[(i + 1) + (j + 1) * m] = localtheta[1] ;
-            }
-            else{
-                A[i + j * m] = con1 * pow(expr1, nu1)
-                    * gsl_sf_bessel_Knu(nu1, expr1); 
-                A[(i + 1) + j * m] = A[i + (j + 1) * m] = con12 
-                    * pow(expr12, nu12) * gsl_sf_bessel_Knu(nu12, expr12);  
-                A[(i + 1) + (j + 1) * m] = con2 * pow(expr2, nu2) 
-                    * gsl_sf_bessel_Knu(nu2, expr2);
-            }
-            j0++;
-        }
-        i0++;
-    }
+			if(expr1 == 0){
+				A[i + j * m] = localtheta[0] ;
+				A[(i + 1) + j * m] = A[i + (j + 1) * m] = rho;
+				A[(i + 1) + (j + 1) * m] = localtheta[1] ;
+			}
+			else{
+				A[i + j * m] = con1 * pow(expr1, nu1)
+					* gsl_sf_bessel_Knu(nu1, expr1); 
+				A[(i + 1) + j * m] = A[i + (j + 1) * m] = con12 
+					* pow(expr12, nu12) * gsl_sf_bessel_Knu(nu12, expr12);  
+				A[(i + 1) + (j + 1) * m] = con2 * pow(expr2, nu2) 
+					* gsl_sf_bessel_Knu(nu2, expr2);
+			}
+			j0++;
+		}
+		i0++;
+	}
 }
 
 
@@ -513,63 +566,63 @@ void core_dcmg_bivariate_flexible (double *A, int m, int n,
  *
  ******************************************************************************/
 void core_dcmg_bivariate_parsimonious (double *A, int m, int n,
-        int m0, int n0, location  *l1,
-        location *l2, double *localtheta, int distance_metric) {
+		int m0, int n0, location  *l1,
+		location *l2, double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    double x0, y0;
-    double expr = 0.0;
-    double con1 = 0.0, con2 = 0.0, con12 = 0.0, rho = 0.0, nu12 = 0.0;
-    //	double localtheta[0] = localtheta[0], localtheta[1] = localtheta[1];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	double x0, y0;
+	double expr = 0.0;
+	double con1 = 0.0, con2 = 0.0, con12 = 0.0, rho = 0.0, nu12 = 0.0;
+	//	double localtheta[0] = localtheta[0], localtheta[1] = localtheta[1];
 
-    con1 = pow(2,(localtheta[3]-1)) * tgamma(localtheta[3]);
-    con1 = 1.0/con1;
-    con1 = localtheta[0] * con1;
+	con1 = pow(2,(localtheta[3]-1)) * tgamma(localtheta[3]);
+	con1 = 1.0/con1;
+	con1 = localtheta[0] * con1;
 
-    con2 = pow(2,(localtheta[4]-1)) * tgamma(localtheta[4]);
-    con2 = 1.0/con2;
-    con2 = localtheta[1] * con2;
+	con2 = pow(2,(localtheta[4]-1)) * tgamma(localtheta[4]);
+	con2 = 1.0/con2;
+	con2 = localtheta[1] * con2;
 
-    //The average
-    nu12 = 0.5 * (localtheta[3] + localtheta[4]);    
+	//The average
+	nu12 = 0.5 * (localtheta[3] + localtheta[4]);    
 
-    rho = localtheta[5] * sqrt( (tgamma(localtheta[3] + 1)*tgamma(localtheta[4] + 1)) /
-            (tgamma(localtheta[3]) * tgamma(localtheta[4])) ) *
-        tgamma(nu12) / tgamma(nu12 + 1);
+	rho = localtheta[5] * sqrt( (tgamma(localtheta[3] + 1)*tgamma(localtheta[4] + 1)) /
+			(tgamma(localtheta[3]) * tgamma(localtheta[4])) ) *
+		tgamma(nu12) / tgamma(nu12 + 1);
 
 
 
-    con12 = pow(2,(nu12-1)) * tgamma(nu12);
-    con12 = 1.0/con12;
-    con12 = rho * sqrt(localtheta[0] * localtheta[1]) * con12;    
+	con12 = pow(2,(nu12-1)) * tgamma(nu12);
+	con12 = 1.0/con12;
+	con12 = rho * sqrt(localtheta[0] * localtheta[1]) * con12;    
 
-    i0/=2;
-    for (i = 0; i < m-1; i+=2) {
-        j0 = n0/2;
-        for (j = 0; j < n-1; j+=2) {
-            expr = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/localtheta[2];
+	i0/=2;
+	for (i = 0; i < m-1; i+=2) {
+		j0 = n0/2;
+		for (j = 0; j < n-1; j+=2) {
+			expr = calculateDistance(l1, l2, i0, j0, distance_metric, 0)/localtheta[2];
 
-            if(expr == 0){
-                A[i + j * m] = localtheta[0] ;
-                A[(i + 1) + j * m] = A[i + (j + 1) * m] = rho 
-                    * sqrt(localtheta[0] * localtheta[1]) ;
-                A[(i + 1) + (j + 1) * m] = localtheta[1] ;
-            }
-            else{
-                A[i + j * m] = con1 * pow(expr, localtheta[3])
-                    * gsl_sf_bessel_Knu(localtheta[3], expr); 
-                A[(i + 1) + j * m] = A[i + (j + 1) * m] = con12 * pow(expr, nu12) 
-                    * gsl_sf_bessel_Knu(nu12, expr);  
-                A[(i + 1) + (j + 1) * m] = con2 * pow(expr, localtheta[4])
-                    * gsl_sf_bessel_Knu(localtheta[4], expr);
-            }
-            // printf ("===%d, %d, %d, %d (%f)\n" , i, j, i0, j0, expr);
-            j0++;
-        }
-        i0++;
-    }
+			if(expr == 0){
+				A[i + j * m] = localtheta[0] ;
+				A[(i + 1) + j * m] = A[i + (j + 1) * m] = rho 
+					* sqrt(localtheta[0] * localtheta[1]) ;
+				A[(i + 1) + (j + 1) * m] = localtheta[1] ;
+			}
+			else{
+				A[i + j * m] = con1 * pow(expr, localtheta[3])
+					* gsl_sf_bessel_Knu(localtheta[3], expr); 
+				A[(i + 1) + j * m] = A[i + (j + 1) * m] = con12 * pow(expr, nu12) 
+					* gsl_sf_bessel_Knu(nu12, expr);  
+				A[(i + 1) + (j + 1) * m] = con2 * pow(expr, localtheta[4])
+					* gsl_sf_bessel_Knu(localtheta[4], expr);
+			}
+			// printf ("===%d, %d, %d, %d (%f)\n" , i, j, i0, j0, expr);
+			j0++;
+		}
+		i0++;
+	}
 }
 
 /*
@@ -644,12 +697,12 @@ else
 A[i + j * m] = localtheta[0]2 ;
 else
 {
-    if (i+m0>=size/2.0 && j+n0>=size/2.0)
-        A[i + j * m] = con2*pow(expr, nu2)*gsl_sf_bessel_Knu(nu2,expr); // Matern Function
-    else if (i+m0<size/2.0 && j+n0<size/2)
-        A[i + j * m] = con1*pow(expr, nu1)*gsl_sf_bessel_Knu(nu1,expr); // Matern Function                
-    else 
-        A[i + j * m] = con12*pow(expr, nu12)*gsl_sf_bessel_Knu(nu12,expr); // Matern Function
+	if (i+m0>=size/2.0 && j+n0>=size/2.0)
+		A[i + j * m] = con2*pow(expr, nu2)*gsl_sf_bessel_Knu(nu2,expr); // Matern Function
+	else if (i+m0<size/2.0 && j+n0<size/2)
+		A[i + j * m] = con1*pow(expr, nu1)*gsl_sf_bessel_Knu(nu1,expr); // Matern Function                
+	else 
+		A[i + j * m] = con12*pow(expr, nu12)*gsl_sf_bessel_Knu(nu12,expr); // Matern Function
 }
 j0++;
 }
@@ -697,42 +750,42 @@ i0++;
  *
  ******************************************************************************/
 void core_dcmg_pow_exp (double *A, int m, int n,
-        int m0, int n0,
-        location  *l1, location *l2, 
-        double *localtheta, int distance_metric) {
+		int m0, int n0,
+		location  *l1, location *l2, 
+		double *localtheta, int distance_metric) {
 
-    //Matern kernel
-    //localtheta[0] --> variance (sigma),
-    //localtheta[1] --> range(beta)
-    //localtheta[2] --> smoothness (nu)
+	//Matern kernel
+	//localtheta[0] --> variance (sigma),
+	//localtheta[1] --> range(beta)
+	//localtheta[2] --> smoothness (nu)
 
-    //Power exp kernel
-    //localtheta[0] --> variance (sigma),
-    //localtheta[1] --> range(beta)
-    //localtheta[2] --> range(delta)   0 < delta< 2
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    double x0, y0, z0;
-    double expr  = 0.0;
-    double expr1 = 0.0;
-    double sigma_square = localtheta[0];// * localtheta[0];
+	//Power exp kernel
+	//localtheta[0] --> variance (sigma),
+	//localtheta[1] --> range(beta)
+	//localtheta[2] --> range(delta)   0 < delta< 2
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	double x0, y0, z0;
+	double expr  = 0.0;
+	double expr1 = 0.0;
+	double sigma_square = localtheta[0];// * localtheta[0];
 
-    for (i = 0; i < m; i++) {
-        j0 = n0;
-        for (j = 0; j < n; j++) {
-            expr  = calculateDistance(l1, l2, i0, j0, distance_metric, 0);
-            expr1 = pow(expr, localtheta[2]);
+	for (i = 0; i < m; i++) {
+		j0 = n0;
+		for (j = 0; j < n; j++) {
+			expr  = calculateDistance(l1, l2, i0, j0, distance_metric, 0);
+			expr1 = pow(expr, localtheta[2]);
 
 
-            if(expr == 0)
-                A[i + j * m] = sigma_square /*+ 1e-4*/;
-            else
-                A[i + j * m] = sigma_square *  exp(-(expr1/localtheta[1])) ; // power-exp kernel
-            j0++;
-        }
-        i0++;
-    }
+			if(expr == 0)
+				A[i + j * m] = sigma_square /*+ 1e-4*/;
+			else
+				A[i + j * m] = sigma_square *  exp(-(expr1/localtheta[1])) ; // power-exp kernel
+			j0++;
+		}
+		i0++;
+	}
 }
 
 
@@ -776,33 +829,33 @@ void core_dcmg_pow_exp (double *A, int m, int n,
  *
  ******************************************************************************/
 void core_scmg_pow_exp (float *A, int m, int n,
-        int m0, int n0,
-        location  *l1,    location *l2,
-        double *localtheta, int distance_metric) {
+		int m0, int n0,
+		location  *l1,    location *l2,
+		double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    float x0, y0, z0;
-    float expr = 0.0;
-    float expr1 = 0.0;
-    float sigma_square = localtheta[0];// * localtheta[0];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	float x0, y0, z0;
+	float expr = 0.0;
+	float expr1 = 0.0;
+	float sigma_square = localtheta[0];// * localtheta[0];
 
 
-    for (i = 0; i < m; i++) {
-        j0 = n0;
-        for (j = 0; j < n; j++) {
-            expr  = calculateDistance(l1, l2,
-                    i0, j0, distance_metric, 0);
-            expr1 = pow(expr, localtheta[2]);
-            if(expr == 0)
-                A[i + j * m] = sigma_square /*+ 1e-4*/;
-            else
-                A[i + j * m] = sigma_square *  exp(-(expr1/localtheta[1])) ; // power-exp kernel
-            j0++;
-        }
-        i0++;
-    }
+	for (i = 0; i < m; i++) {
+		j0 = n0;
+		for (j = 0; j < n; j++) {
+			expr  = calculateDistance(l1, l2,
+					i0, j0, distance_metric, 0);
+			expr1 = pow(expr, localtheta[2]);
+			if(expr == 0)
+				A[i + j * m] = sigma_square /*+ 1e-4*/;
+			else
+				A[i + j * m] = sigma_square *  exp(-(expr1/localtheta[1])) ; // power-exp kernel
+			j0++;
+		}
+		i0++;
+	}
 
 }
 
@@ -847,31 +900,31 @@ void core_scmg_pow_exp (float *A, int m, int n,
  ******************************************************************************/
 
 void core_sdcmg_pow_exp (double *A, int m, int n,
-        int m0, int n0, 
-        location  *l1, location *l2, 
-        double *localtheta, int distance_metric) {
+		int m0, int n0, 
+		location  *l1, location *l2, 
+		double *localtheta, int distance_metric) {
 
-    int i, j;
-    int i0 = m0;
-    int j0 = n0;
-    double x0, y0, z0;
-    double expr = 0.0;
-    double expr1 = 0.0;
-    double sigma_square = localtheta[0];// * localtheta[0];
+	int i, j;
+	int i0 = m0;
+	int j0 = n0;
+	double x0, y0, z0;
+	double expr = 0.0;
+	double expr1 = 0.0;
+	double sigma_square = localtheta[0];// * localtheta[0];
 
-    for (i = 0; i < m; i++) {
-        j0 = n0;
-        for (j = 0; j < n; j++) {
-            expr  = calculateDistance(l1, l2, i0, j0, distance_metric, 0);
-            expr1 = pow(expr, localtheta[2]);
-            if(expr == 0)
-                A[i + j * m] = (float)(sigma_square /*+ 1e-4*/);
-            else
-                A[i + j * m] = (float)(sigma_square *  exp(-(expr1/localtheta[1]))); // power-exp kernel
-            j0++;
-        }
-        i0++;
-    }
+	for (i = 0; i < m; i++) {
+		j0 = n0;
+		for (j = 0; j < n; j++) {
+			expr  = calculateDistance(l1, l2, i0, j0, distance_metric, 0);
+			expr1 = pow(expr, localtheta[2]);
+			if(expr == 0)
+				A[i + j * m] = (float)(sigma_square /*+ 1e-4*/);
+			else
+				A[i + j * m] = (float)(sigma_square *  exp(-(expr1/localtheta[1]))); // power-exp kernel
+			j0++;
+		}
+		i0++;
+	}
 }
 
 

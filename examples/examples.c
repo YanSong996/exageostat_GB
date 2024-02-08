@@ -194,6 +194,8 @@ void init(int *test, int *N,  int *ncores, int *gpus, int *p_grid, int *q_grid, 
 	data->idw		= arguments->idw;
 	data->recovery_file     = arguments->recovery_file;
 	data->checkpoint_file   = arguments->checkpoint_file;
+       // data->M                 = atoi(arguments->M);
+	
 	printf("%d\n", arguments->time_slots);
 
 	data->time_slots        = atoi(arguments->time_slots);
@@ -227,6 +229,8 @@ void init(int *test, int *N,  int *ncores, int *gpus, int *p_grid, int *q_grid, 
 		num_params = 6;
         else if(strcmp(data->kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
                 num_params = 7;
+        else if(strcmp(data->kernel_fun, "trend_model")   == 0)
+                num_params = 1;
 	else
 	{
 		fprintf(stderr,"Choosen kernel is not exist(6)!\n");

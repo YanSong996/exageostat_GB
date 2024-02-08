@@ -73,7 +73,9 @@ typedef struct
         char    *checkpoint_file;      ///< checkpoint file path.
         char    *recovery_file;        ///< Recovery file path.
         char    *dim;                  ///< 2D or 3D
-	char*     time_slots;	       ///< spatio-temoral time slots.
+	char    *time_slots;	       ///< spatio-temoral time slots.
+        char    *M;                    ///< Number of terms in anual cycle model.
+
 } arguments;
 
 void check_args(arguments *arg_values);
@@ -132,6 +134,7 @@ static struct argp_option options[] =
         {"dim",  'N', "DIMENSION", 0, "Dimension"},
         {"time_slots",  'O', "TIME_SLOT", 0, "time slots"},
         {"idw",  'P', 0, 0, "inverse distance weighted (IDW)"},
+        {"M",   'Q', "TERMS", 0, "Number of terms"},	
 	{0}
 };
 
@@ -269,8 +272,11 @@ parse_opt (int key, char *arg, struct argp_state *state)
                         arguments->time_slots = arg;
                         break;
                 case 'P':
-                        arguments->idw = 1;
-                        break;
+			arguments->idw = 1;
+			break;
+		case 'Q':
+			arguments->M = arg;
+			break;
 		default:
 			return ARGP_ERR_UNKNOWN;
 	}

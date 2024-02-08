@@ -295,907 +295,1003 @@ void MORSE_MLE_dzvg_Tile_Async(MLE_data *data,  double * Nrand, double * initial
     VERBOSE("************************************************************\n");
 }
 
+double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void * MORSE_data)
+//! Maximum Loglikelihood Evaluation (MLE)
+/*!  -- using exact or approximation computation, and (single, double, or mixed) precision.
+ * Returns the loglikelihhod value for the given theta.
+ * @param[in] n: unsigned variable used by NLOPT package.
+ * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
+ *                           that is used to to generate the Covariance Matrix.
+ * @param[in] grad: double variable used by NLOPT package.
+ * @param[in] data: MLE_data struct with different MLE inputs.
+ */
+{
+
+    //Initialization
+    double value;
+    MLE_data* data	= ((MLE_data*)MORSE_data);
+    int M = data->M;                     // M is a int determined by us, which could be e.g. 5 for hourly data.
+    int T = data->T;
+    double *forcing=data->forcing;  // ? forcing is a vector loaded from a .csv file, in data (obs_dir)
+    int no_years=data->no_years; 
+  
+    MORSE_desc_t *Zobs=data->descZ;     // ? Zobs is the time series at certain grid, should be in data
+    MORSE_desc_t *X=data->X;        // X is a matrix generated in this process
+    MORSE_desc_t *part1=data->descpart1;  // a vector generated in this process
+    MORSE_desc_t *part2=data->descpart2;  // a vector generated in this process
+    MORSE_desc_t *part2_vector=data->part2_vector;  // a vector generated in this process
+    MORSE_sequence_t *msequence      = (MORSE_sequence_t *) data->sequence;
+    MORSE_request_t  *mrequest       = (MORSE_request_t *) data->request;
+    int         N       = X->m;
+    MORSE_desc_t *XtX=data->XtX;           // a matrix generated in this process
+    // EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&forcing, NULL, MorseRealDouble, dts,dts,dts*dts,N,N,0,0,N,1,p_grid,q_grid);
+    // EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Zobs, NULL, MorseRealDouble, dts,dts,dts*dts,N,N,0,0,N,1,p_grid,q_grid);
+
+
+    //generate the matrix
+    double* localtheta =  (double *) malloc((3+no_years) * sizeof(double));
+    localtheta[0]= theta[0];
+    localtheta[1]= T;
+    localtheta[2]= M;
+
+    for(int ii=0;ii<no_years;ii++)
+	    localtheta[3+ii]=forcing[ii];
+
+  //  fprintf(stderr, "%f %f %f %f\n", localtheta[0], localtheta[1], localtheta[2], localtheta[3]);
+
+    MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, X, NULL,
+		    NULL, NULL, localtheta,
+		    data->dm, "trend_model",  msequence, mrequest);
+
+
+//    fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
+//    double *C = (double *) malloc(N *15 *sizeof(double));
+ //   MORSE_Tile_to_Lapack( X, C, N);
+  //  print_dmatrix("testC", N, 15, C, N);
+
+    //***********************************
+
+    //calculate part1
+    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
+
+    //fprintf(stderr, "%f\n", data->part1);
+    //exit(0);
+    //       double *z = (double *) malloc(N * sizeof(double));
+    //        MORSE_Tile_to_Lapack( Zobs, z, N);
+    //for(int i=0;i<N;i++)
+    //fprintf(stderr, "%f\n", z[i]);
+    //exit(0);
+
+    //Calculate part2
+    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
+
+    //double *z = (double *) malloc(15 * sizeof(double));
+    //MORSE_Tile_to_Lapack( part2_vector, z, 15);
+    //for(int i=0;i<N;i++)
+    //   fprintf(stderr, "%f\n", z[i]);
+    //exit(0);
+
+
+
+    MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
+
+//    double *z = (double *) malloc(15 * 15* sizeof(double));
+ //   MORSE_Tile_to_Lapack( XtX, z, 15);
+  //  print_dmatrix("XtX", 15, 15, z, 15);
+
+
+    MORSE_dpotrf_Tile(MorseLower,XtX);
+    MORSE_dtrtri_Tile(MorseLower,MorseNonUnit,XtX);
+    MORSE_dgemm_Tile(MorseNoTrans,MorseNoTrans,1.0,XtX,part2_vector,0.0,part2_vector);
+    //    gsl_blas_dgemv(CblasNoTrans,1.0,XtX,part2_vector,0.0,part2_vector);
+    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
+
+    value=(-1.0)*log(data->part1-data->part2);
+    fprintf(stderr, "%f %f\n", value, theta[0]);
+    exit(0);
+    return value;
+}
 
 
 double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * MORSE_data) {
-    //! Maximum Likelihood Evaluation (MLE)
-    /*!  -- MORSE-sync
-     * Returns the loglikelihhod value for the given theta.
-     * @param[in] n: unsigned variable used by NLOPT library.
-     * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
-     *                           that is used to to generate the Covariance Matrix.
-     * @param[in] grad: double variable used by NLOPT library. 
-     * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
-     * */
-    //Initialization
-    double loglik=0.0,  logdet=0.0, time_facto = 0.0, time_solve = 0.0, logdet_calculate = 0.0, matrix_gen_time=0.0, dzcpy_time=0.0;
+	//! Maximum Likelihood Evaluation (MLE)
+	/*!  -- MORSE-sync
+	 * Returns the loglikelihhod value for the given theta.
+	 * @param[in] n: unsigned variable used by NLOPT library.
+	 * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
+	 *                           that is used to to generate the Covariance Matrix.
+	 * @param[in] grad: double variable used by NLOPT library. 
+	 * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
+	 * */
+	//Initialization
+	double loglik=0.0,  logdet=0.0, time_facto = 0.0, time_solve = 0.0, logdet_calculate = 0.0, matrix_gen_time=0.0, dzcpy_time=0.0;
 
-    int N, NRHS, success, i, num_params;
-    double flops =0.0;	
-    double* univariate_theta;
-    double* univariate2_theta;
-    double* univariate3_theta;
-    double nu12;
-    double rho;
-    double sigma_square12;
+	int N, NRHS, success, i, num_params;
+	double flops =0.0;	
+	double* univariate_theta;
+	double* univariate2_theta;
+	double* univariate3_theta;
+	double nu12;
+	double rho;
+	double sigma_square12;
 
-    MLE_data* data	= ((MLE_data*)MORSE_data);
-    data->det	= 0;
-    data->dotp	= 0;
+	MLE_data* data	= ((MLE_data*)MORSE_data);
+	data->det	= 0;
+	data->dotp	= 0;
 
-    MORSE_desc_t *MORSE_descC	 = (MORSE_desc_t *) data->descC;
-    MORSE_desc_t *MORSE_descsubC11   = (MORSE_desc_t *) data->descsubC11;
-    MORSE_desc_t *MORSE_descsubC12   = (MORSE_desc_t *) data->descsubC12;
-    //MORSE_desc_t *MORSE_descsubC21   = (MORSE_desc_t *) data->descsubC21;
-    MORSE_desc_t *MORSE_descsubC22   = (MORSE_desc_t *) data->descsubC22;
-    MORSE_desc_t *MORSE_descZ	 = (MORSE_desc_t *) data->descZ;
-    MORSE_desc_t *MORSE_descZ1       = (MORSE_desc_t *) data->descZ1;
-    MORSE_desc_t *MORSE_descZ2       = (MORSE_desc_t *) data->descZ2;
-    MORSE_desc_t *MORSE_descZcpy	 = (MORSE_desc_t *) data->descZcpy; 
-    MORSE_desc_t *MORSE_descdet	 = (MORSE_desc_t *) data->descdet;
-    MORSE_desc_t *MORSE_descproduct	 = (MORSE_desc_t *) data->descproduct;
-    MORSE_desc_t *MORSE_descproduct1 = (MORSE_desc_t *) data->descproduct1;
-    MORSE_desc_t *MORSE_descproduct2 = (MORSE_desc_t *) data->descproduct2;
-    MORSE_sequence_t *msequence	 = (MORSE_sequence_t *) data->sequence;
-    MORSE_request_t  *mrequest	 = (MORSE_request_t *) data->request;
+	MORSE_desc_t *MORSE_descC	 = (MORSE_desc_t *) data->descC;
+	MORSE_desc_t *MORSE_descsubC11   = (MORSE_desc_t *) data->descsubC11;
+	MORSE_desc_t *MORSE_descsubC12   = (MORSE_desc_t *) data->descsubC12;
+	//MORSE_desc_t *MORSE_descsubC21   = (MORSE_desc_t *) data->descsubC21;
+	MORSE_desc_t *MORSE_descsubC22   = (MORSE_desc_t *) data->descsubC22;
+	MORSE_desc_t *MORSE_descZ	 = (MORSE_desc_t *) data->descZ;
+	MORSE_desc_t *MORSE_descZ1       = (MORSE_desc_t *) data->descZ1;
+	MORSE_desc_t *MORSE_descZ2       = (MORSE_desc_t *) data->descZ2;
+	MORSE_desc_t *MORSE_descZcpy	 = (MORSE_desc_t *) data->descZcpy; 
+	MORSE_desc_t *MORSE_descdet	 = (MORSE_desc_t *) data->descdet;
+	MORSE_desc_t *MORSE_descproduct	 = (MORSE_desc_t *) data->descproduct;
+	MORSE_desc_t *MORSE_descproduct1 = (MORSE_desc_t *) data->descproduct1;
+	MORSE_desc_t *MORSE_descproduct2 = (MORSE_desc_t *) data->descproduct2;
+	MORSE_sequence_t *msequence	 = (MORSE_sequence_t *) data->sequence;
+	MORSE_request_t  *mrequest	 = (MORSE_request_t *) data->request;
 
-    if(strcmp(data->kernel_fun, "univariate_matern_stationary")   == 0 || strcmp(data->kernel_fun, "univariate_pow_exp_stationary")   == 0 )
-        num_params = 3;
-    else if(strcmp(data->kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
-        num_params = 4;
-    else if(strcmp(data->kernel_fun, "univariate_matern_non_stationary")   == 0)
-        num_params = 9;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_flexible")   == 0)
-        num_params = 11;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
-        num_params = 7;
-    else
-    {
-        fprintf(stderr,"Choosen kernel is not exist(2)!\n");
-        fprintf(stderr, "Called function is: %s\n",__func__);
-        exit(0);
-    }
-    N	= MORSE_descC->m;
-    NRHS	= MORSE_descZ->n;
-
-
-
-    START_TIMING(dzcpy_time);
-    if(data->iter_count==0)
-        //Save a copy of descZ into descZcpy for restoring each iteration (Only for the first iteration)
-        MORSE_dlacpy_Tile(MorseUpperLower, MORSE_descZ, MORSE_descZcpy);
-    if(strcmp(data->recovery_file,"") != 0 && recover(data->recovery_file, data->iter_count, theta, &loglik, num_params));
-    else
-    {
-        START_TIMING(dzcpy_time);
-        if(data->iter_count==0)
-            //Save a copy of descZ into descZcpy for restoring each iteration (Only for the first iteration)
-            MORSE_dlacpy_Tile(MorseUpperLower, MORSE_descZ, MORSE_descZcpy); 
-        else
-        {	
-            VERBOSE("Re-store the original Z vector...");
-            MORSE_dlacpy_Tile(MorseUpperLower ,MORSE_descZcpy,MORSE_descZ);
-            VERBOSE(" Done.\n");
-        }
-        STOP_TIMING(dzcpy_time);	
-
-        // double *C = (double *) malloc(N * N * sizeof(double));
-
-        //Generate new co-variance matrix C based on new theta	
-        VERBOSE("Generate New Covariance Matrix...");
-        START_TIMING(matrix_gen_time);	
-        //MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, msequence, &mrequest[0], &data->l1, &data->l1, (double *)theta,  data->dm); 
-        if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
-        {
-
-            univariate_theta =(double *) malloc(3 * sizeof(double));
-            univariate2_theta =(double *) malloc(3 * sizeof(double));
-            univariate3_theta =(double *) malloc(3 * sizeof(double));
-            univariate_theta[0]=theta[0];
-            univariate_theta[1]=theta[2];
-            univariate_theta[2]=theta[3];
-
-            MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, MORSE_descsubC11, &data->l1,
-                    &data->l1, &data->lm, univariate_theta, data->dm,
-                    "univariate_matern_stationary",  msequence, &mrequest[0]);
+	if(strcmp(data->kernel_fun, "univariate_matern_stationary")   == 0 || strcmp(data->kernel_fun, "univariate_pow_exp_stationary")   == 0 )
+		num_params = 3;
+	else if(strcmp(data->kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
+		num_params = 4;
+	else if(strcmp(data->kernel_fun, "univariate_matern_non_stationary")   == 0)
+		num_params = 9;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_flexible")   == 0)
+		num_params = 11;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
+		num_params = 7;
+	else
+	{
+		fprintf(stderr,"Choosen kernel is not exist(2)!\n");
+		fprintf(stderr, "Called function is: %s\n",__func__);
+		exit(0);
+	}
+	N	= MORSE_descC->m;
+	NRHS	= MORSE_descZ->n;
 
 
-            nu12 = 0.5 * (theta[3] + theta[4]);
 
-            rho = theta[5] * sqrt( (tgamma(theta[3] + 1)*tgamma(theta[4] + 1)) /
-                    (tgamma(theta[3]) * tgamma(theta[4])) ) *
-                tgamma(nu12) / tgamma(nu12 + 1);
-            sigma_square12 = rho * sqrt(theta[0]*theta[1]) ;
+	START_TIMING(dzcpy_time);
+	if(data->iter_count==0)
+		//Save a copy of descZ into descZcpy for restoring each iteration (Only for the first iteration)
+		MORSE_dlacpy_Tile(MorseUpperLower, MORSE_descZ, MORSE_descZcpy);
+	if(strcmp(data->recovery_file,"") != 0 && recover(data->recovery_file, data->iter_count, theta, &loglik, num_params));
+	else
+	{
+		START_TIMING(dzcpy_time);
+		if(data->iter_count==0)
+			//Save a copy of descZ into descZcpy for restoring each iteration (Only for the first iteration)
+			MORSE_dlacpy_Tile(MorseUpperLower, MORSE_descZ, MORSE_descZcpy); 
+		else
+		{	
+			VERBOSE("Re-store the original Z vector...");
+			MORSE_dlacpy_Tile(MorseUpperLower ,MORSE_descZcpy,MORSE_descZ);
+			VERBOSE(" Done.\n");
+		}
+		STOP_TIMING(dzcpy_time);	
 
-            univariate2_theta[0]=sigma_square12;
-            univariate2_theta[1]=theta[2];
-            univariate2_theta[2]=nu12; 
-            MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, MORSE_descsubC12, &data->l1,
-                    &data->l1, &data->lm, univariate2_theta, 
-                    data->dm, "univariate_matern_stationary",  msequence, &mrequest[0]);
+		// double *C = (double *) malloc(N * N * sizeof(double));
 
-            //MORSE_Sequence_Wait(msequence);
-            STOP_TIMING(matrix_gen_time);
-            VERBOSE(" Done.\n");
+		//Generate new co-variance matrix C based on new theta	
+		VERBOSE("Generate New Covariance Matrix...");
+		START_TIMING(matrix_gen_time);	
+		//MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, msequence, &mrequest[0], &data->l1, &data->l1, (double *)theta,  data->dm); 
+		if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
+		{
 
-            univariate3_theta[0]=theta[1];
-            univariate3_theta[1]=theta[2];
-            univariate3_theta[2]=theta[4];
-            MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, MORSE_descsubC22, &data->l1, 
-                    &data->l1, &data->lm, univariate3_theta, 
-                    data->dm, "univariate_matern_stationary",  msequence, &mrequest[0]);
-            //MORSE_Sequence_Wait(msequence);
-        }
-        else   
-            MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, &data->l1,
-                    &data->l1, &data->lm, (double *)theta, data->dm,
-                    data->kernel_fun,  msequence, &mrequest[0]);
+			univariate_theta =(double *) malloc(3 * sizeof(double));
+			univariate2_theta =(double *) malloc(3 * sizeof(double));
+			univariate3_theta =(double *) malloc(3 * sizeof(double));
+			univariate_theta[0]=theta[0];
+			univariate_theta[1]=theta[2];
+			univariate_theta[2]=theta[3];
 
-        MORSE_Sequence_Wait(msequence);
-        STOP_TIMING(matrix_gen_time);
-        VERBOSE(" Done.\n");
-
-        // double *C = (double *) malloc(N * N * sizeof(double));
-        // MORSE_Tile_to_Lapack( data->descC, C, N);
-        // print_dmatrix("testC", N, N, C, N);
-        //exit(0);
-
-        //MORSE_MLE_dprint_Tile_Async(MORSE_descC, msequence, &mrequest[0]);
-        // MORSE_Sequence_Wait(msequence);
-        //exit(0);
-
-        //exit(0);
-        //Calculate Cholesky Factorization (C=LL-1)
-        VERBOSE("Cholesky factorization of Sigma...");
-        START_TIMING(time_facto);
-        success = MORSE_dpotrf_Tile(MorseLower, MORSE_descC);
-        STOP_TIMING(time_facto);
-        SUCCESS(success, "Factorization cannot be performed..\n The matrix is not positive definite\n\n");
-        flops = flops + FLOPS_DPOTRF(N);
-        VERBOSE(" Done.\n");
+			MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, MORSE_descsubC11, &data->l1,
+					&data->l1, &data->lm, univariate_theta, data->dm,
+					"univariate_matern_stationary",  msequence, &mrequest[0]);
 
 
-        //double *C = (double *) malloc(N * N * sizeof(double));
-        //MORSE_Tile_to_Lapack( MORSE_descC, C, N);
-        //print_dmatrix("testC", 16, 16, C, 16);
+			nu12 = 0.5 * (theta[3] + theta[4]);
 
-        //*********************************************
-        //you need to generate the full matrix
-        /*MORSE_desc_t *MORSE_descC2       = NULL;
-          MORSE_desc_t *MORSE_descC3       = NULL;
-          MORSE_desc_t *MORSE_descC4       = NULL;
-          MORSE_Sequence_Wait(msequence);
-          EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC2,NULL , MorseRealDouble, 560, 560, 560 * 560, N, N, 0, 0, N, N, 1, 1);
-          EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC4,NULL , MorseRealDouble, 560, 560, 560 * 560, N, N, 0, 0, N, N, 1, 1);
-          MORSE_dlaset_Tile(MorseUpperLower, 0, 0, MORSE_descC4);
-          MORSE_dlacpy_Tile(MorseLower ,MORSE_descC,MORSE_descC4);
-          EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC3,NULL , MorseRealDouble, 560, 560, 560 * 560, N, N, 0, 0, N, N, 1, 1);
-          MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC2, msequence, &mrequest[0], &data->l1, &data->l1, (double *)theta,  data->dm);
-          MORSE_Sequence_Wait(msequence);
-          MORSE_dgemm_Tile (MorseNoTrans, MorseTrans, 1, MORSE_descC4, MORSE_descC4, 0, MORSE_descC3);
+			rho = theta[5] * sqrt( (tgamma(theta[3] + 1)*tgamma(theta[4] + 1)) /
+					(tgamma(theta[3]) * tgamma(theta[4])) ) *
+				tgamma(nu12) / tgamma(nu12 + 1);
+			sigma_square12 = rho * sqrt(theta[0]*theta[1]) ;
 
-          double error=0;
-          double norm_c=0;
-          MORSE_dgeadd_Tile_Async( MorseTrans, 1.0, MORSE_descC2
-          ,-1.0, MORSE_descC3, msequence, &mrequest[0] );
-          MORSE_Sequence_Wait(msequence);
-          MORSE_dlange_Tile_Async( MorseFrobeniusNorm,
-          MORSE_descC3, &error, msequence, &mrequest[0]
-          );
-          MORSE_Sequence_Wait(msequence);
-          MORSE_dlange_Tile_Async( MorseFrobeniusNorm,
-          MORSE_descC2, &norm_c, msequence, &mrequest[0]
-          );
+			univariate2_theta[0]=sigma_square12;
+			univariate2_theta[1]=theta[2];
+			univariate2_theta[2]=nu12; 
+			MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, MORSE_descsubC12, &data->l1,
+					&data->l1, &data->lm, univariate2_theta, 
+					data->dm, "univariate_matern_stationary",  msequence, &mrequest[0]);
 
+			//MORSE_Sequence_Wait(msequence);
+			STOP_TIMING(matrix_gen_time);
+			VERBOSE(" Done.\n");
 
-          MORSE_Sequence_Wait(msequence);
-          printf("error: %e\n", (error/norm_c));
-          exit(0);
-          */
-        //***************************************
-        //MORSE_Tile_to_Lapack( MORSE_descC, C, N);
-        //print_dmatrix("testC", 16, 16, C, 16);
-        //exit(0);
-        //MORSE_MLE_dprint_Tile_Async(MORSE_descC, msequence, &mrequest[0]);
-        //MORSE_Sequence_Wait(msequence);
-        //exit(0);
+			univariate3_theta[0]=theta[1];
+			univariate3_theta[1]=theta[2];
+			univariate3_theta[2]=theta[4];
+			MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, MORSE_descsubC22, &data->l1, 
+					&data->l1, &data->lm, univariate3_theta, 
+					data->dm, "univariate_matern_stationary",  msequence, &mrequest[0]);
+			//MORSE_Sequence_Wait(msequence);
+		}
+		else   
+			MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, &data->l1,
+					&data->l1, &data->lm, (double *)theta, data->dm,
+					data->kernel_fun,  msequence, &mrequest[0]);
 
-        //Calculate log(|C|) --> log(square(|L|))
-        VERBOSE("Calculating the log determinant ...");
-        START_TIMING(logdet_calculate);
-        MORSE_MLE_dmdet_Tile_Async(MORSE_descC, msequence, &mrequest[0], MORSE_descdet);
-        MORSE_Sequence_Wait(msequence);
-        // printf("det: %f\n", data->det);
-        logdet= 2*data->det;
-        STOP_TIMING(logdet_calculate);
-        VERBOSE(" Done.\n");
+		MORSE_Sequence_Wait(msequence);
+		STOP_TIMING(matrix_gen_time);
+		VERBOSE(" Done.\n");
 
-        //        printf("logdet: %f\n",logdet);        
+		// double *C = (double *) malloc(N * N * sizeof(double));
+		// MORSE_Tile_to_Lapack( data->descC, C, N);
+		// print_dmatrix("testC", N, N, C, N);
+		//exit(0);
+
+		//MORSE_MLE_dprint_Tile_Async(MORSE_descC, msequence, &mrequest[0]);
+		// MORSE_Sequence_Wait(msequence);
+		//exit(0);
+
+		//exit(0);
+		//Calculate Cholesky Factorization (C=LL-1)
+		VERBOSE("Cholesky factorization of Sigma...");
+		START_TIMING(time_facto);
+		success = MORSE_dpotrf_Tile(MorseLower, MORSE_descC);
+		STOP_TIMING(time_facto);
+		SUCCESS(success, "Factorization cannot be performed..\n The matrix is not positive definite\n\n");
+		flops = flops + FLOPS_DPOTRF(N);
+		VERBOSE(" Done.\n");
 
 
-        // double *C = (double *) malloc(N * N * sizeof(double));
-        // MORSE_Tile_to_Lapack( MORSE_descC, C, N);
-        // print_dmatrix("testC", 70, 70, C, 70);
-        // double *zz = MORSE_descZ->mat;
-        // int k=0;
-        //for(k=0;k<N;k++)
-        //        printf("%f, %d\n", zz[k], k);
-        //exit(0);
+		//double *C = (double *) malloc(N * N * sizeof(double));
+		//MORSE_Tile_to_Lapack( MORSE_descC, C, N);
+		//print_dmatrix("testC", 16, 16, C, 16);
 
-        //Solving Linear System (L*X=Z)--->inv(L)*Z
-        VERBOSE("Solving the linear system ...\n");
-        START_TIMING(time_solve);
-        MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, MORSE_descC, MORSE_descZ);
-        STOP_TIMING(time_solve);
-        flops = flops + FLOPS_DTRSM(MorseLeft,N, NRHS);
-        VERBOSE(" Done.\n");    
+		//*********************************************
+		//you need to generate the full matrix
+		/*MORSE_desc_t *MORSE_descC2       = NULL;
+		  MORSE_desc_t *MORSE_descC3       = NULL;
+		  MORSE_desc_t *MORSE_descC4       = NULL;
+		  MORSE_Sequence_Wait(msequence);
+		  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC2,NULL , MorseRealDouble, 560, 560, 560 * 560, N, N, 0, 0, N, N, 1, 1);
+		  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC4,NULL , MorseRealDouble, 560, 560, 560 * 560, N, N, 0, 0, N, N, 1, 1);
+		  MORSE_dlaset_Tile(MorseUpperLower, 0, 0, MORSE_descC4);
+		  MORSE_dlacpy_Tile(MorseLower ,MORSE_descC,MORSE_descC4);
+		  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC3,NULL , MorseRealDouble, 560, 560, 560 * 560, N, N, 0, 0, N, N, 1, 1);
+		  MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC2, msequence, &mrequest[0], &data->l1, &data->l1, (double *)theta,  data->dm);
+		  MORSE_Sequence_Wait(msequence);
+		  MORSE_dgemm_Tile (MorseNoTrans, MorseTrans, 1, MORSE_descC4, MORSE_descC4, 0, MORSE_descC3);
 
-        //double *zz = MORSE_descZ->mat;
-        //	int k=0;
-        //	for(k=0;k<N;k++)
-        //	      printf("%f, %d\n", zz[k], k);
-        //	  exit(0);
-
-
-        //Calculate MLE likelihood
-        VERBOSE("Calculating the MLE likelihood function ...");
-        //dotp=0;
-        //MORSE_MLE_core_ddotp_Async(MORSE_descZ,MORSE_descproduct,msequence, &mrequest[0]);
-        //MORSE_Sequence_Wait(msequence);        
-
-        MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ, MORSE_descZ, 0, MORSE_descproduct); 
-
-        //***************************************
-
-        if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0 )
-        {
-
-            loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1, MORSE_descZ1, 0, MORSE_descproduct1);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2, MORSE_descZ2, 0, MORSE_descproduct2);
-            data->variance1 = (1.0/(N/2)) * data->dotp1;
-            data->variance2 = (1.0/(N/2)) * data->dotp2;
-
-            /*                loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
-                              double *z = (double *) malloc(N * sizeof(double));
-                              double *z1 = (double *) malloc((N/2) * sizeof(double));
-                              double *z2 = (double *) malloc((N/2) * sizeof(double));
-                              int dts=320;
-                              int p_grid=1;
-                              int q_grid=1;
-                              MORSE_desc_t *MORSE_descZ1p;
-                              MORSE_desc_t *MORSE_descZ2p;
-
-                              MORSE_Tile_to_Lapack( MORSE_descZ, z, N);
-                              EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ1p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
-                              EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ2p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
-                              int i=0;
-                              int j=0;
+		  double error=0;
+		  double norm_c=0;
+		  MORSE_dgeadd_Tile_Async( MorseTrans, 1.0, MORSE_descC2
+		  ,-1.0, MORSE_descC3, msequence, &mrequest[0] );
+		  MORSE_Sequence_Wait(msequence);
+		  MORSE_dlange_Tile_Async( MorseFrobeniusNorm,
+		  MORSE_descC3, &error, msequence, &mrequest[0]
+		  );
+		  MORSE_Sequence_Wait(msequence);
+		  MORSE_dlange_Tile_Async( MorseFrobeniusNorm,
+		  MORSE_descC2, &norm_c, msequence, &mrequest[0]
+		  );
 
 
-                              for(i=0;i<N/2;i++)
-                              {
-                              z1[j]=z[i];
-                              z2[j]=z[i+N/2];
-            //      printf("%f- %f\n", z1[j], z2[j]);
-            j++;
-            }
+		  MORSE_Sequence_Wait(msequence);
+		  printf("error: %e\n", (error/norm_c));
+		  exit(0);
+		  */
+		//***************************************
+		//MORSE_Tile_to_Lapack( MORSE_descC, C, N);
+		//print_dmatrix("testC", 16, 16, C, 16);
+		//exit(0);
+		//MORSE_MLE_dprint_Tile_Async(MORSE_descC, msequence, &mrequest[0]);
+		//MORSE_Sequence_Wait(msequence);
+		//exit(0);
+
+		//Calculate log(|C|) --> log(square(|L|))
+		VERBOSE("Calculating the log determinant ...");
+		START_TIMING(logdet_calculate);
+		MORSE_MLE_dmdet_Tile_Async(MORSE_descC, msequence, &mrequest[0], MORSE_descdet);
+		MORSE_Sequence_Wait(msequence);
+		// printf("det: %f\n", data->det);
+		logdet= 2*data->det;
+		STOP_TIMING(logdet_calculate);
+		VERBOSE(" Done.\n");
+
+		//        printf("logdet: %f\n",logdet);        
 
 
-            MORSE_Lapack_to_Tile( z1, N/2, MORSE_descZ1p);
-            MORSE_Lapack_to_Tile( z2, N/2, MORSE_descZ2p);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1p, MORSE_descZ1p, 0, MORSE_descproduct1);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2p, MORSE_descZ2p, 0, MORSE_descproduct2);
-            data->variance1 = (1.0/(N/2)) * data->dotp1;
-            data->variance2 = (1.0/(N/2)) * data->dotp2;
-            */
-        }
-        else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
-        {
+		// double *C = (double *) malloc(N * N * sizeof(double));
+		// MORSE_Tile_to_Lapack( MORSE_descC, C, N);
+		// print_dmatrix("testC", 70, 70, C, 70);
+		// double *zz = MORSE_descZ->mat;
+		// int k=0;
+		//for(k=0;k<N;k++)
+		//        printf("%f, %d\n", zz[k], k);
+		//exit(0);
 
-            loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
+		//Solving Linear System (L*X=Z)--->inv(L)*Z
+		VERBOSE("Solving the linear system ...\n");
+		START_TIMING(time_solve);
+		MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, MORSE_descC, MORSE_descZ);
+		STOP_TIMING(time_solve);
+		flops = flops + FLOPS_DTRSM(MorseLeft,N, NRHS);
+		VERBOSE(" Done.\n");    
 
-            //to be optimized
-            MORSE_stride_vec_Tile_Async(MORSE_descZ, MORSE_descZ1, MORSE_descZ2, msequence, &mrequest[0]);
-            //MORSE_Sequence_Wait(msequence);
-            //double *z = (double *) malloc(N * sizeof(double));
-            //MORSE_Tile_to_Lapack( MORSE_descZ, z, N);
-            //MORSE_Lapack_to_Tile( z, N/2, MORSE_descZ1);
-            //MORSE_Lapack_to_Tile( &z[N/2], N/2, MORSE_descZ2);
-            //*********************************
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1, MORSE_descZ1, 0, MORSE_descproduct1);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2, MORSE_descZ2, 0, MORSE_descproduct2);
-            data->variance1 = (1.0/(N/2)) * data->dotp1;
-            data->variance2 = (1.0/(N/2)) * data->dotp2;
-            //free(z);
-            /*                loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
-                              double *z = (double *) malloc(N * sizeof(double));
-                              double *z1 = (double *) malloc((N/2) * sizeof(double));
-                              double *z2 = (double *) malloc((N/2) * sizeof(double));
-                              int dts=320;
-                              int p_grid=1;
-                              int q_grid=1;
-                              MORSE_desc_t *MORSE_descZ1p;
-                              MORSE_desc_t *MORSE_descZ2p;
-
-                              MORSE_Tile_to_Lapack( MORSE_descZ, z, N);
-                              EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ1p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
-                              EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ2p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
-                              int i=0;
-                              int j=0;
+		//double *zz = MORSE_descZ->mat;
+		//	int k=0;
+		//	for(k=0;k<N;k++)
+		//	      printf("%f, %d\n", zz[k], k);
+		//	  exit(0);
 
 
-                              for(i=0;i<N;i+=2)
-                              {
-                              z1[j]=z[i];
-                              z2[j]=z[i+1];
-            //	printf("%f- %f\n", z1[j], z2[j]);
-            j++;
-            }
+		//Calculate MLE likelihood
+		VERBOSE("Calculating the MLE likelihood function ...");
+		//dotp=0;
+		//MORSE_MLE_core_ddotp_Async(MORSE_descZ,MORSE_descproduct,msequence, &mrequest[0]);
+		//MORSE_Sequence_Wait(msequence);        
+
+		MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ, MORSE_descZ, 0, MORSE_descproduct); 
+
+		//***************************************
+
+		if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0 )
+		{
+
+			loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1, MORSE_descZ1, 0, MORSE_descproduct1);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2, MORSE_descZ2, 0, MORSE_descproduct2);
+			data->variance1 = (1.0/(N/2)) * data->dotp1;
+			data->variance2 = (1.0/(N/2)) * data->dotp2;
+
+			/*                loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
+					  double *z = (double *) malloc(N * sizeof(double));
+					  double *z1 = (double *) malloc((N/2) * sizeof(double));
+					  double *z2 = (double *) malloc((N/2) * sizeof(double));
+					  int dts=320;
+					  int p_grid=1;
+					  int q_grid=1;
+					  MORSE_desc_t *MORSE_descZ1p;
+					  MORSE_desc_t *MORSE_descZ2p;
+
+					  MORSE_Tile_to_Lapack( MORSE_descZ, z, N);
+					  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ1p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
+					  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ2p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
+					  int i=0;
+					  int j=0;
 
 
-            MORSE_Lapack_to_Tile( z1, N/2, MORSE_descZ1p);
-            MORSE_Lapack_to_Tile( z2, N/2, MORSE_descZ2p);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1p, MORSE_descZ1p, 0, MORSE_descproduct1);
-            MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2p, MORSE_descZ2p, 0, MORSE_descproduct2);
-            data->variance1 = (1.0/(N/2)) * data->dotp1;
-            data->variance2 = (1.0/(N/2)) * data->dotp2;
-            */
+					  for(i=0;i<N/2;i++)
+					  {
+					  z1[j]=z[i];
+					  z2[j]=z[i+N/2];
+			//      printf("%f- %f\n", z1[j], z2[j]);
+			j++;
+			}
 
-        }
-        else
-        {
 
-            loglik = -0.5 * data->dotp -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
-            data->variance= theta[0];
-        }
-        VERBOSE(" Done.\n");
+			MORSE_Lapack_to_Tile( z1, N/2, MORSE_descZ1p);
+			MORSE_Lapack_to_Tile( z2, N/2, MORSE_descZ2p);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1p, MORSE_descZ1p, 0, MORSE_descproduct1);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2p, MORSE_descZ2p, 0, MORSE_descproduct2);
+			data->variance1 = (1.0/(N/2)) * data->dotp1;
+			data->variance2 = (1.0/(N/2)) * data->dotp2;
+			*/
+		}
+		else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
+		{
 
-    }
+			loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
 
-    //Distribute the values in the case of MPI
+			//to be optimized
+			MORSE_stride_vec_Tile_Async(MORSE_descZ, MORSE_descZ1, MORSE_descZ2, msequence, &mrequest[0]);
+			//MORSE_Sequence_Wait(msequence);
+			//double *z = (double *) malloc(N * sizeof(double));
+			//MORSE_Tile_to_Lapack( MORSE_descZ, z, N);
+			//MORSE_Lapack_to_Tile( z, N/2, MORSE_descZ1);
+			//MORSE_Lapack_to_Tile( &z[N/2], N/2, MORSE_descZ2);
+			//*********************************
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1, MORSE_descZ1, 0, MORSE_descproduct1);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2, MORSE_descZ2, 0, MORSE_descproduct2);
+			data->variance1 = (1.0/(N/2)) * data->dotp1;
+			data->variance2 = (1.0/(N/2)) * data->dotp2;
+			//free(z);
+			/*                loglik = -(N /2) + (N /2)*log (N) -(N / 2 ) * log(data->dotp) -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
+					  double *z = (double *) malloc(N * sizeof(double));
+					  double *z1 = (double *) malloc((N/2) * sizeof(double));
+					  double *z2 = (double *) malloc((N/2) * sizeof(double));
+					  int dts=320;
+					  int p_grid=1;
+					  int q_grid=1;
+					  MORSE_desc_t *MORSE_descZ1p;
+					  MORSE_desc_t *MORSE_descZ2p;
+
+					  MORSE_Tile_to_Lapack( MORSE_descZ, z, N);
+					  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ1p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
+					  EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZ2p, NULL, MorseRealDouble, dts, dts, dts * dts, N/2, 1, 0, 0, N/2, 1, p_grid, q_grid);
+					  int i=0;
+					  int j=0;
+
+
+					  for(i=0;i<N;i+=2)
+					  {
+					  z1[j]=z[i];
+					  z2[j]=z[i+1];
+			//	printf("%f- %f\n", z1[j], z2[j]);
+			j++;
+			}
+
+
+			MORSE_Lapack_to_Tile( z1, N/2, MORSE_descZ1p);
+			MORSE_Lapack_to_Tile( z2, N/2, MORSE_descZ2p);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ1p, MORSE_descZ1p, 0, MORSE_descproduct1);
+			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2p, MORSE_descZ2p, 0, MORSE_descproduct2);
+			data->variance1 = (1.0/(N/2)) * data->dotp1;
+			data->variance2 = (1.0/(N/2)) * data->dotp2;
+			*/
+
+		}
+		else
+		{
+
+			loglik = -0.5 * data->dotp -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
+			data->variance= theta[0];
+		}
+		VERBOSE(" Done.\n");
+
+	}
+
+	//Distribute the values in the case of MPI
 #if defined(CHAMELEON_USE_MPI)
-    MPI_Bcast(&loglik, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD );
-    //MPI_Bcast(theta, num_params, MPI_DOUBLE, 0, MPI_COMM_WORLD );
-    if(MORSE_My_Mpi_Rank() == 0)
-    {
+	MPI_Bcast(&loglik, 1, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+	//MPI_Bcast(theta, num_params, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+	if(MORSE_My_Mpi_Rank() == 0)
+	{
 #endif
 
-        //		if(strcmp(data->checkpoint_file,"") != 0)    
-        //			checkpointing(data->checkpoint_file, data->iter_count, theta, loglik, num_params);
+		//		if(strcmp(data->checkpoint_file,"") != 0)    
+		//			checkpointing(data->checkpoint_file, data->iter_count, theta, loglik, num_params);
 
 
-        //Print Iteration Summary
-        //fprintf(stderr,"***************************************************\n");
-        //	fprintf(stderr,"\n------ddotproduct: %.17g ", data->dotp);
-        //	fprintf(stderr,"\n------logdet: %.17g ", logdet);
-        //fprintf(stderr,"------det: %.*e ", det);
-        //fprintf(stderr,"\n------expr2: %.8f \n",((double) (N / 2) * log(2 * PI)));
-        //fprintf(stderr," ---- Theta1: %.8f ----  Theta2: %.8f ---- Theta3: %.8f ----LogLi: %.8f\n", theta[0], theta[1], theta[2],loglik);
-        //reformat
+		//Print Iteration Summary
+		//fprintf(stderr,"***************************************************\n");
+		//	fprintf(stderr,"\n------ddotproduct: %.17g ", data->dotp);
+		//	fprintf(stderr,"\n------logdet: %.17g ", logdet);
+		//fprintf(stderr,"------det: %.*e ", det);
+		//fprintf(stderr,"\n------expr2: %.8f \n",((double) (N / 2) * log(2 * PI)));
+		//fprintf(stderr," ---- Theta1: %.8f ----  Theta2: %.8f ---- Theta3: %.8f ----LogLi: %.8f\n", theta[0], theta[1], theta[2],loglik);
+		//reformat
 
-        printf(" %3d- Model Parameters (",  data->iter_count+1);
+		printf(" %3d- Model Parameters (",  data->iter_count+1);
 
-        if(data->log == 1)
-            fprintf(data->pFileLog, " %3d- Model Parameters (",  data->iter_count+1);
+		if(data->log == 1)
+			fprintf(data->pFileLog, " %3d- Model Parameters (",  data->iter_count+1);
 
-        if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
-        {	
-            printf("%.8f, %.8f,", data->variance1, data->variance2);
-            if(data->log == 1)
-                fprintf(data->pFileLog,"%.8f, %.8f,", data->variance1, data->variance2);
-            i = 2;
-            results.estimated_theta[0] = data->variance1;
-            results.estimated_theta[1] = data->variance2;
-        }
-        else
-            i=0;
-        for(;i<num_params; i++)
-        {
-            printf("%.8f", theta[i]);
-            if (i <num_params-1)
-                printf(",");
+		if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
+		{	
+			printf("%.8f, %.8f,", data->variance1, data->variance2);
+			if(data->log == 1)
+				fprintf(data->pFileLog,"%.8f, %.8f,", data->variance1, data->variance2);
+			i = 2;
+			results.estimated_theta[0] = data->variance1;
+			results.estimated_theta[1] = data->variance2;
+		}
+		else
+			i=0;
+		for(;i<num_params; i++)
+		{
+			printf("%.8f", theta[i]);
+			if (i <num_params-1)
+				printf(",");
 
-            results.estimated_theta[i] = theta[i];
-            if(data->log == 1)
-                fprintf(data->pFileLog,"%.8f, ", theta[i]);
-        }
+			results.estimated_theta[i] = theta[i];
+			if(data->log == 1)
+				fprintf(data->pFileLog,"%.8f, ", theta[i]);
+		}
 
-        printf(")----> LogLi: %.18f\n", loglik);
-        if(data->log == 1)
-            fprintf(data->pFileLog, ")----> LogLi: %.18f\n", loglik);
+		printf(")----> LogLi: %.18f\n", loglik);
+		if(data->log == 1)
+			fprintf(data->pFileLog, ")----> LogLi: %.18f\n", loglik);
 
 
-        printf(" ---- Facto Time: %6.2f\n", time_facto);
-        printf(" ---- logdet Time: %6.2f\n", logdet_calculate);
-        printf(" ---- dtrsm Time: %6.2f\n", time_solve);
-        printf(" ---- Matrix Generation Time: %6.2f\n", matrix_gen_time);
-        //fprintf(stderr," ---- re-store Z Vector Time: %6.2f\n", zcpy_time);
-        printf(" ---- Total Time: %6.2f\n", /*matrix_gen_time+*/ time_facto + logdet_calculate + time_solve);
-        //fprintf(stderr," ---- Gflop (ignore): %6.2f\n", flops / 1e9 );
-        printf(" ---- Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
-        //fprintf(stderr," ---- Peak Performance: %6.2f Gflops/s\n",  (ncores*p_grid*q_grid*16*2.3) );
-        //fprintf(stderr,"***************************************************\n");
+		printf(" ---- Facto Time: %6.2f\n", time_facto);
+		printf(" ---- logdet Time: %6.2f\n", logdet_calculate);
+		printf(" ---- dtrsm Time: %6.2f\n", time_solve);
+		printf(" ---- Matrix Generation Time: %6.2f\n", matrix_gen_time);
+		//fprintf(stderr," ---- re-store Z Vector Time: %6.2f\n", zcpy_time);
+		printf(" ---- Total Time: %6.2f\n", /*matrix_gen_time+*/ time_facto + logdet_calculate + time_solve);
+		//fprintf(stderr," ---- Gflop (ignore): %6.2f\n", flops / 1e9 );
+		printf(" ---- Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
+		//fprintf(stderr," ---- Peak Performance: %6.2f Gflops/s\n",  (ncores*p_grid*q_grid*16*2.3) );
+		//fprintf(stderr,"***************************************************\n");
 
 #if defined(CHAMELEON_USE_MPI)
-    }
+	}
 #endif
 
-    data->iter_count++;
-    // for experiments
-    data->avg_exec_time_per_iter += /*matrix_gen_time +*/ time_facto + logdet_calculate + time_solve;
-    data->avg_flops_per_iter += flops / 1e9 / (time_facto + time_solve);
-    data->final_loglik = loglik;
+	data->iter_count++;
+	// for experiments
+	data->avg_exec_time_per_iter += /*matrix_gen_time +*/ time_facto + logdet_calculate + time_solve;
+	data->avg_flops_per_iter += flops / 1e9 / (time_facto + time_solve);
+	data->final_loglik = loglik;
 
-    //output
-    results.final_loglik = loglik;
+	//output
+	results.final_loglik = loglik;
 
 
-    return loglik;
+	return loglik;
 }
 
 double MORSE_dmle_Tile_Async(unsigned n, const double * theta, double * grad, void * MORSE_data) {
-    //! Maximum Likelihood Evaluation (MLE)
-    /*!  -- MORSE-Async
-     * Returns the loglikelihhod value for the given theta.
-     * @param[in] n: unsigned variable used by NLOPT library.
-     * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
-     *                           that is used to to generate the Covariance Matrix.
-     * @param[in] grad: double variable used by NLOPT library.
-     * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
-     * */
-    //Initialization
-    double loglik=0.0,  logdet=0.0, time_facto = 0.0, time_solve = 0.0, logdet_calculate = 0.0, matrix_gen_time=0.0, dzcpy_time=0.0, flops = 0.0;
-    int N, NRHS, success;
+	//! Maximum Likelihood Evaluation (MLE)
+	/*!  -- MORSE-Async
+	 * Returns the loglikelihhod value for the given theta.
+	 * @param[in] n: unsigned variable used by NLOPT library.
+	 * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
+	 *                           that is used to to generate the Covariance Matrix.
+	 * @param[in] grad: double variable used by NLOPT library.
+	 * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
+	 * */
+	//Initialization
+	double loglik=0.0,  logdet=0.0, time_facto = 0.0, time_solve = 0.0, logdet_calculate = 0.0, matrix_gen_time=0.0, dzcpy_time=0.0, flops = 0.0;
+	int N, NRHS, success;
 
-    MLE_data* data	= ((MLE_data*)MORSE_data);
-    data->det	= 0;
-    data->dotp	= 0;
+	MLE_data* data	= ((MLE_data*)MORSE_data);
+	data->det	= 0;
+	data->dotp	= 0;
 
-    MORSE_desc_t *MORSE_descC	= (MORSE_desc_t *) data->descC;
-    MORSE_desc_t *MORSE_descZ	= (MORSE_desc_t *) data->descZ;
-    MORSE_desc_t *MORSE_descZcpy	= (MORSE_desc_t *) data->descZcpy; 
-    MORSE_desc_t *MORSE_descdet	= (MORSE_desc_t *) data->descdet;
-    MORSE_desc_t *MORSE_descproduct	= (MORSE_desc_t *) data->descproduct;
-    MORSE_sequence_t *msequence	= (MORSE_sequence_t *) data->sequence;
-    MORSE_request_t  *mrequest	= (MORSE_request_t *) data->request;
+	MORSE_desc_t *MORSE_descC	= (MORSE_desc_t *) data->descC;
+	MORSE_desc_t *MORSE_descZ	= (MORSE_desc_t *) data->descZ;
+	MORSE_desc_t *MORSE_descZcpy	= (MORSE_desc_t *) data->descZcpy; 
+	MORSE_desc_t *MORSE_descdet	= (MORSE_desc_t *) data->descdet;
+	MORSE_desc_t *MORSE_descproduct	= (MORSE_desc_t *) data->descproduct;
+	MORSE_sequence_t *msequence	= (MORSE_sequence_t *) data->sequence;
+	MORSE_request_t  *mrequest	= (MORSE_request_t *) data->request;
 
-    N	= MORSE_descC->m;
-    NRHS	= MORSE_descZ->n;
-    START_TIMING(dzcpy_time);
-    if(data->iter_count == 0)
-        //Save a copy of descZ into descZcpy for restoring each iteration (Only for the first iteration)
-        MORSE_dlacpy_Tile_Async(MorseUpperLower, MORSE_descZ, MORSE_descZcpy, msequence, mrequest); 
-    else
-    {	
-        VERBOSE("re-store the original Z vector...");
-        MORSE_dlacpy_Tile_Async(MorseUpperLower, MORSE_descZcpy, MORSE_descZ, msequence, mrequest);
-        VERBOSE(" Done.\n");
-    }
-    STOP_TIMING(dzcpy_time);	
+	N	= MORSE_descC->m;
+	NRHS	= MORSE_descZ->n;
+	START_TIMING(dzcpy_time);
+	if(data->iter_count == 0)
+		//Save a copy of descZ into descZcpy for restoring each iteration (Only for the first iteration)
+		MORSE_dlacpy_Tile_Async(MorseUpperLower, MORSE_descZ, MORSE_descZcpy, msequence, mrequest); 
+	else
+	{	
+		VERBOSE("re-store the original Z vector...");
+		MORSE_dlacpy_Tile_Async(MorseUpperLower, MORSE_descZcpy, MORSE_descZ, msequence, mrequest);
+		VERBOSE(" Done.\n");
+	}
+	STOP_TIMING(dzcpy_time);	
 
 
-    //Generate new co-variance matrix C based on new theta	
-    VERBOSE("Generate New Covariance Matrix...");
-    START_TIMING(matrix_gen_time);	
-    //MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, msequence, mrequest, &data->l1, &data->l1,(double*) theta,  data->dm);    
-    MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, &data->l1, &data->l1, &data->lm, (double *)theta, data->dm, data->kernel_fun,  msequence, &mrequest[0]);
-    MORSE_Sequence_Wait(msequence);
-    STOP_TIMING(matrix_gen_time);
-    VERBOSE(" Done.\n");
+	//Generate new co-variance matrix C based on new theta	
+	VERBOSE("Generate New Covariance Matrix...");
+	START_TIMING(matrix_gen_time);	
+	//MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, msequence, mrequest, &data->l1, &data->l1,(double*) theta,  data->dm);    
+	MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC, &data->l1, &data->l1, &data->lm, (double *)theta, data->dm, data->kernel_fun,  msequence, &mrequest[0]);
+	MORSE_Sequence_Wait(msequence);
+	STOP_TIMING(matrix_gen_time);
+	VERBOSE(" Done.\n");
 
-    //Calculate Cholesky Factorization (C=LL-1)
-    VERBOSE("Cholesky factorization of Sigma...");
-    START_TIMING(time_facto);
-    success = MORSE_dpotrf_Tile_Async(MorseLower, MORSE_descC, msequence, mrequest);
-    STOP_TIMING(time_facto);
-    SUCCESS(success, "Factorization cannot be performed..\n The matrix is not positive definite\n\n");
-    flops = flops + FLOPS_DPOTRF(N);
-    VERBOSE(" Done.\n");
+	//Calculate Cholesky Factorization (C=LL-1)
+	VERBOSE("Cholesky factorization of Sigma...");
+	START_TIMING(time_facto);
+	success = MORSE_dpotrf_Tile_Async(MorseLower, MORSE_descC, msequence, mrequest);
+	STOP_TIMING(time_facto);
+	SUCCESS(success, "Factorization cannot be performed..\n The matrix is not positive definite\n\n");
+	flops = flops + FLOPS_DPOTRF(N);
+	VERBOSE(" Done.\n");
 
-    //Calculate log(|C|) --> log(square(|L|))
-    VERBOSE("Calculating the log determinant ...");
-    START_TIMING(logdet_calculate);
-    MORSE_MLE_dmdet_Tile_Async(MORSE_descC, msequence, &mrequest[0],MORSE_descdet);
-    MORSE_Sequence_Wait(msequence);
-    logdet= 2*data->det;
-    STOP_TIMING(logdet_calculate);
-    VERBOSE(" Done.\n");
+	//Calculate log(|C|) --> log(square(|L|))
+	VERBOSE("Calculating the log determinant ...");
+	START_TIMING(logdet_calculate);
+	MORSE_MLE_dmdet_Tile_Async(MORSE_descC, msequence, &mrequest[0],MORSE_descdet);
+	MORSE_Sequence_Wait(msequence);
+	logdet= 2*data->det;
+	STOP_TIMING(logdet_calculate);
+	VERBOSE(" Done.\n");
 
-    //Solving Linear System (L*X=Z)--->inv(L)*Z
-    VERBOSE("Solving the linear system ...\n");
-    START_TIMING(time_solve);
-    MORSE_dtrsm_Tile_Async(MorseLeft,MorseLower,MorseNoTrans,MorseNonUnit,1,MORSE_descC,MORSE_descZ, msequence, mrequest);
-    STOP_TIMING(time_solve);
-    flops = flops + FLOPS_DTRSM(MorseLeft,N, NRHS);
-    VERBOSE(" Done.\n");    
+	//Solving Linear System (L*X=Z)--->inv(L)*Z
+	VERBOSE("Solving the linear system ...\n");
+	START_TIMING(time_solve);
+	MORSE_dtrsm_Tile_Async(MorseLeft,MorseLower,MorseNoTrans,MorseNonUnit,1,MORSE_descC,MORSE_descZ, msequence, mrequest);
+	STOP_TIMING(time_solve);
+	flops = flops + FLOPS_DTRSM(MorseLeft,N, NRHS);
+	VERBOSE(" Done.\n");    
 
-    //Claculate MLE likelihood
-    VERBOSE("Calculating the MLE likelihood function ...");
-    MORSE_dgemm_Tile_Async (MorseTrans, MorseNoTrans, 1, MORSE_descZ, MORSE_descZ, 0, MORSE_descproduct, msequence, mrequest); 
-    loglik = -0.5 * data->dotp -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
-    VERBOSE(" Done.\n");
+	//Claculate MLE likelihood
+	VERBOSE("Calculating the MLE likelihood function ...");
+	MORSE_dgemm_Tile_Async (MorseTrans, MorseNoTrans, 1, MORSE_descZ, MORSE_descZ, 0, MORSE_descproduct, msequence, mrequest); 
+	loglik = -0.5 * data->dotp -  0.5*logdet - (double) (N / 2.0) * log(2.0 * PI);
+	VERBOSE(" Done.\n");
 
-    //Distribute the values in the case of MPI
+	//Distribute the values in the case of MPI
 #if defined(CHAMELEON_USE_MPI)
-    MPI_Bcast(&loglik,1, MPI_DOUBLE, 0, MPI_COMM_WORLD );
-    MPI_Bcast(theta,3, MPI_DOUBLE, 0, MPI_COMM_WORLD );
-    if(MORSE_My_Mpi_Rank() == 0)
-    {
+	MPI_Bcast(&loglik,1, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+	MPI_Bcast(theta,3, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+	if(MORSE_My_Mpi_Rank() == 0)
+	{
 #endif
-        //Print Iteration Summary
-        //fprintf(stderr,"***************************************************\n");
-        fprintf(stderr,"------ddotproduct: %.8f ", data->dotp);
-        fprintf(stderr,"------logdet: %.8f ", logdet);
-        //fprintf(stderr,"------det: %.*e ", det);
-        fprintf(stderr,"------expr2: %.8f ",((double) (N / 2) * log(2 * PI)));
-        //fprintf(stderr," ---- Theta1: %.8f ----  Theta2: %.8f ---- Theta3: %.8f ----LogLi: %.8f\n", theta[0], theta[1], theta[2],loglik);
-        //reformat
-        fprintf(stderr," %3d- Model Parameters (variance, range, smoothness): (%.8f, %.8f, %.8f) ----> LogLi: %.8f\n", data->iter_count+1,  theta[0], theta[1], theta[2],loglik);
+		//Print Iteration Summary
+		//fprintf(stderr,"***************************************************\n");
+		fprintf(stderr,"------ddotproduct: %.8f ", data->dotp);
+		fprintf(stderr,"------logdet: %.8f ", logdet);
+		//fprintf(stderr,"------det: %.*e ", det);
+		fprintf(stderr,"------expr2: %.8f ",((double) (N / 2) * log(2 * PI)));
+		//fprintf(stderr," ---- Theta1: %.8f ----  Theta2: %.8f ---- Theta3: %.8f ----LogLi: %.8f\n", theta[0], theta[1], theta[2],loglik);
+		//reformat
+		fprintf(stderr," %3d- Model Parameters (variance, range, smoothness): (%.8f, %.8f, %.8f) ----> LogLi: %.8f\n", data->iter_count+1,  theta[0], theta[1], theta[2],loglik);
 
-        if(data->log == 1)
-            fprintf(data->pFileLog, " %3d- Model Parameters (variance, range, smoothness): (%.8f, %.8f, %.8f) ----> LogLi: %.8f\n", data->iter_count+1,  theta[0], theta[1], theta[2],loglik);
+		if(data->log == 1)
+			fprintf(data->pFileLog, " %3d- Model Parameters (variance, range, smoothness): (%.8f, %.8f, %.8f) ----> LogLi: %.8f\n", data->iter_count+1,  theta[0], theta[1], theta[2],loglik);
 
-        fprintf(stderr," ---- Facto Time: %6.2f\n", time_facto);
-        fprintf(stderr," ---- logdet Time: %6.2f\n", logdet_calculate);
-        fprintf(stderr," ---- dtrsm Time: %6.2f\n", time_solve);
-        fprintf(stderr," ---- Matrix Generation Time: %6.2f\n", matrix_gen_time);
-        //fprintf(stderr," ---- re-store Z Vector Time: %6.2f\n", dzcpy_time);
-        fprintf(stderr," ---- Total Time: %6.2f\n", matrix_gen_time+time_facto + logdet_calculate + time_solve);
-        //fprintf(stderr," ---- Gflop (ignore): %6.2f\n", flops / 1e9 );    
-        //fprintf(stderr," ---- Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
-        //fprintf(stderr," ---- Peak Performance: %6.2f Gflops/s\n",  (ncores*p_grid*q_grid*16*2.3) );
-        //fprintf(stderr,"***************************************************\n");
+		fprintf(stderr," ---- Facto Time: %6.2f\n", time_facto);
+		fprintf(stderr," ---- logdet Time: %6.2f\n", logdet_calculate);
+		fprintf(stderr," ---- dtrsm Time: %6.2f\n", time_solve);
+		fprintf(stderr," ---- Matrix Generation Time: %6.2f\n", matrix_gen_time);
+		//fprintf(stderr," ---- re-store Z Vector Time: %6.2f\n", dzcpy_time);
+		fprintf(stderr," ---- Total Time: %6.2f\n", matrix_gen_time+time_facto + logdet_calculate + time_solve);
+		//fprintf(stderr," ---- Gflop (ignore): %6.2f\n", flops / 1e9 );    
+		//fprintf(stderr," ---- Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
+		//fprintf(stderr," ---- Peak Performance: %6.2f Gflops/s\n",  (ncores*p_grid*q_grid*16*2.3) );
+		//fprintf(stderr,"***************************************************\n");
 #if defined(CHAMELEON_USE_MPI)
-    }
+	}
 #endif
 
-    data->iter_count++;
-    // for experiments
-    data->avg_exec_time_per_iter+=matrix_gen_time+time_facto + logdet_calculate + time_solve;
-    data->avg_flops_per_iter+=flops / 1e9 / (time_facto +time_solve);
-    data->final_loglik=loglik;
+	data->iter_count++;
+	// for experiments
+	data->avg_exec_time_per_iter+=matrix_gen_time+time_facto + logdet_calculate + time_solve;
+	data->avg_flops_per_iter+=flops / 1e9 / (time_facto +time_solve);
+	data->final_loglik=loglik;
 
-    return loglik;
+	return loglik;
 }
 
 
 void MORSE_dmle_Predict_Allocate(MLE_data *MORSE_data, int nZmiss, int nZobs, int dts, int p_grid, int q_grid, int mse_flag)
-    //! Allocate prediction operation descriptors.
-    /*!  
-     * Returns MLE_data data with initial values and new descriptors locations.
-     * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
-     * @param[in] nZmiss: number of missing values (unknown observations).
-     * @param[in] nZobs: number of observed values (known observations).
-     * @param[in] dts: tile size (MB).
-     * @param[in] p_grid: p_grid in the case of distributed system.
-     * @param[in] q_grid: q_grid in the case of distributed system.
-     * @param[in] mse_flag: flag to enable or disable Mean Square Error (MSE) computing.
-     * */
+	//! Allocate prediction operation descriptors.
+	/*!  
+	 * Returns MLE_data data with initial values and new descriptors locations.
+	 * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
+	 * @param[in] nZmiss: number of missing values (unknown observations).
+	 * @param[in] nZobs: number of observed values (known observations).
+	 * @param[in] dts: tile size (MB).
+	 * @param[in] p_grid: p_grid in the case of distributed system.
+	 * @param[in] q_grid: q_grid in the case of distributed system.
+	 * @param[in] mse_flag: flag to enable or disable Mean Square Error (MSE) computing.
+	 * */
 {
 
-    MORSE_desc_t *MORSE_descZmiss   = NULL;
-    MORSE_desc_t *MORSE_descC12     = NULL;
-    MORSE_desc_t *MORSE_descC22     = NULL;
-    MORSE_desc_t *MORSE_descmse     = NULL;
-    MORSE_desc_t *MORSE_descmse1     = NULL;
-    MORSE_desc_t *MORSE_descmse2     = NULL;	
-    MORSE_desc_t *MORSE_descZactual = NULL;
-    MORSE_desc_t *MORSE_descZobs    = NULL;
-    MLE_data     *data              = (MLE_data*) MORSE_data;
+	MORSE_desc_t *MORSE_descZmiss   = NULL;
+	MORSE_desc_t *MORSE_descC12     = NULL;
+	MORSE_desc_t *MORSE_descC22     = NULL;
+	MORSE_desc_t *MORSE_descmse     = NULL;
+	MORSE_desc_t *MORSE_descmse1     = NULL;
+	MORSE_desc_t *MORSE_descmse2     = NULL;	
+	MORSE_desc_t *MORSE_descZactual = NULL;
+	MORSE_desc_t *MORSE_descZobs    = NULL;
+	MLE_data     *data              = (MLE_data*) MORSE_data;
 
-    if(nZmiss <= 0)
-    {
-        fprintf(stderr," Number of missing values should be positive value\n");
-        return;
-    }
+	if(nZmiss <= 0)
+	{
+		fprintf(stderr," Number of missing values should be positive value\n");
+		return;
+	}
 
-    //bi-variate case
-    if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_flexible")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_flexible_profile")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_flexible2")   == 0 ||
-            strcmp(data->kernel_fun, "bivariate_matern_flexible2_profile")   == 0 )
-    {
+	//bi-variate case
+	if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_flexible")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_flexible_profile")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_flexible2")   == 0 ||
+			strcmp(data->kernel_fun, "bivariate_matern_flexible2_profile")   == 0 )
+	{
 
-        nZobs*=2;
-        nZmiss*=2;
+		nZobs*=2;
+		nZmiss*=2;
 
-    }
+	}
 
 
-    //Descriptors Creation
-    EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZobs, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, 1, 0, 0, nZobs, 1, p_grid, q_grid);
-    if( mse_flag == 1)
-    {
-        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZactual, NULL, MorseRealDouble, dts, dts, dts * dts,  nZmiss, 1,  0, 0, nZmiss, 1, p_grid, q_grid);
-        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse, &data->mserror, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
-        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse1, &data->mserror1, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
-        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse2, &data->mserror2, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
-    }
-    EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZmiss, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, 1, 0, 0, nZmiss, 1, p_grid, q_grid);
-    EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC12, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, nZobs, 0, 0, nZmiss, nZobs, p_grid, q_grid);
-    EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC22, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, nZobs, 0, 0, nZobs, nZobs, p_grid, q_grid);
+	//Descriptors Creation
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZobs, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, 1, 0, 0, nZobs, 1, p_grid, q_grid);
+	if( mse_flag == 1)
+	{
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZactual, NULL, MorseRealDouble, dts, dts, dts * dts,  nZmiss, 1,  0, 0, nZmiss, 1, p_grid, q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse, &data->mserror, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse1, &data->mserror1, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse2, &data->mserror2, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
+	}
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZmiss, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, 1, 0, 0, nZmiss, 1, p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC12, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, nZobs, 0, 0, nZmiss, nZobs, p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC22, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, nZobs, 0, 0, nZobs, nZobs, p_grid, q_grid);
 
-    //Initiate data descriptors
-    data->descZmiss         = MORSE_descZmiss;
-    data->descC12           = MORSE_descC12;
-    data->descC22           = MORSE_descC22;
-    data->descmse           = MORSE_descmse;
-    data->descmse1           = MORSE_descmse1;
-    data->descmse2           = MORSE_descmse2;
-    data->descZactual       = MORSE_descZactual;
-    data->descZobs          = MORSE_descZobs;
+	//Initiate data descriptors
+	data->descZmiss         = MORSE_descZmiss;
+	data->descC12           = MORSE_descC12;
+	data->descC22           = MORSE_descC22;
+	data->descmse           = MORSE_descmse;
+	data->descmse1           = MORSE_descmse1;
+	data->descmse2           = MORSE_descmse2;
+	data->descZactual       = MORSE_descZactual;
+	data->descZobs          = MORSE_descZobs;
 
-    //printf("%d- %d - %d\n", MORSE_descC12->m, MORSE_descC12->n, MORSE_descZobs->m);
-    //exit(0);
+	//printf("%d- %d - %d\n", MORSE_descC12->m, MORSE_descC12->n, MORSE_descZobs->m);
+	//exit(0);
 
 }
 
 
 double MORSE_dmle_Predict_Tile(MLE_data *MORSE_data, double * theta, int nZmiss, int nZobs, double *Zobs, double *Zactual, double *Zmiss, int n)
-    //! //Predict missing values base on a set of given values and covariance matrix
-    /*!  -- MORSE-sync
-     * Returns the prediction Mean Square Error (MSE) as double
-     * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
-     * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
-     *                           that is used to to generate the Covariance Matrix.
-     * @param[in] nZmiss: number of missing values (unknown observations).
-     * @param[in] nZobs: number of observed values (known observations).
-     * @param[in] Zobs: observed values vector (known observations).
-     * @param[in] Zmiss missing values vector (unknown observations).
-     * @param[in] Zactual: actual missing values vector (in the case of testing MSE).
-     * @param[in] n: number of spatial locations.
-     * */
+	//! //Predict missing values base on a set of given values and covariance matrix
+	/*!  -- MORSE-sync
+	 * Returns the prediction Mean Square Error (MSE) as double
+	 * @param[in] MORSE_data: MLE_data struct with different MLE inputs.
+	 * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
+	 *                           that is used to to generate the Covariance Matrix.
+	 * @param[in] nZmiss: number of missing values (unknown observations).
+	 * @param[in] nZobs: number of observed values (known observations).
+	 * @param[in] Zobs: observed values vector (known observations).
+	 * @param[in] Zmiss missing values vector (unknown observations).
+	 * @param[in] Zactual: actual missing values vector (in the case of testing MSE).
+	 * @param[in] n: number of spatial locations.
+	 * */
 {
 
-    //initialization	
-    //double *z = NULL, *streamdata = NULL;
-    double time_solve = 0.0;
-    double mat_gen_time = 0.0;
-    double time_gemm = 0.0;
-    double time_mse = 0.0;
-    double flops = 0.0;
-    int num_params = 0;
+	//initialization	
+	//double *z = NULL, *streamdata = NULL;
+	double time_solve = 0.0;
+	double mat_gen_time = 0.0;
+	double time_gemm = 0.0;
+	double time_mse = 0.0;
+	double flops = 0.0;
+	int num_params = 0;
 
-    MORSE_desc_t *MORSE_descZmiss   = NULL;
-    MORSE_desc_t *MORSE_descC12     = NULL;
-    MORSE_desc_t *MORSE_descC22     = NULL;
-    MORSE_desc_t *MORSE_descmse     = NULL;
-    MORSE_desc_t *MORSE_descmse1     = NULL;
-    MORSE_desc_t *MORSE_descmse2     = NULL;	
-    MORSE_desc_t *MORSE_descZactual = NULL;
-    MORSE_desc_t *MORSE_descZobs    = NULL;
-    MLE_data     *data              = (MLE_data*) MORSE_data;
-    MORSE_sequence_t *msequence     = (MORSE_sequence_t *) data->sequence;
-    MORSE_request_t *mrequest       = (MORSE_request_t  *) data->request;
-    data->mserror                   = 0;
+	MORSE_desc_t *MORSE_descZmiss   = NULL;
+	MORSE_desc_t *MORSE_descC12     = NULL;
+	MORSE_desc_t *MORSE_descC22     = NULL;
+	MORSE_desc_t *MORSE_descmse     = NULL;
+	MORSE_desc_t *MORSE_descmse1     = NULL;
+	MORSE_desc_t *MORSE_descmse2     = NULL;	
+	MORSE_desc_t *MORSE_descZactual = NULL;
+	MORSE_desc_t *MORSE_descZobs    = NULL;
+	MLE_data     *data              = (MLE_data*) MORSE_data;
+	MORSE_sequence_t *msequence     = (MORSE_sequence_t *) data->sequence;
+	MORSE_request_t *mrequest       = (MORSE_request_t  *) data->request;
+	data->mserror                   = 0;
 
-    if(nZmiss <= 0)
-    {
-        fprintf(stderr," Number of missing values should be positive value\n");
-        return -1;
-    }
+	if(nZmiss <= 0)
+	{
+		fprintf(stderr," Number of missing values should be positive value\n");
+		return -1;
+	}
 
-    if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
-    {
-        data->kernel_fun= "bivariate_matern_parsimonious";
-    }
-    //Descriptors Creation
-    //EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZobs, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, 1, 0, 0, nZobs, 1, p_grid, q_grid);
-    //if( Zactual != NULL)
-    //{
-    //        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZactual, NULL, MorseRealDouble, dts, dts, dts * dts,  nZmiss, 1,  0, 0, nZmiss, 1, p_grid, q_grid);
-    //        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse, &data->mserror, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
-    //}
-    //EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZmiss, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, 1, 0, 0, nZmiss, 1, p_grid, q_grid);
-    //EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC12, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, nZobs, 0, 0, nZmiss, nZobs, p_grid, q_grid);
-    //EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC22, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, nZobs, 0, 0, nZobs, nZobs, p_grid, q_grid);
+	if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
+	{
+		data->kernel_fun= "bivariate_matern_parsimonious";
+	}
+	//Descriptors Creation
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZobs, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, 1, 0, 0, nZobs, 1, p_grid, q_grid);
+	//if( Zactual != NULL)
+	//{
+	//        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZactual, NULL, MorseRealDouble, dts, dts, dts * dts,  nZmiss, 1,  0, 0, nZmiss, 1, p_grid, q_grid);
+	//        EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse, &data->mserror, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
+	//}
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descZmiss, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, 1, 0, 0, nZmiss, 1, p_grid, q_grid);
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC12, NULL, MorseRealDouble, dts, dts, dts * dts, nZmiss, nZobs, 0, 0, nZmiss, nZobs, p_grid, q_grid);
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC22, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, nZobs, 0, 0, nZobs, nZobs, p_grid, q_grid);
 
-    //Initiate data descriptors
-    MORSE_descZmiss		= data->descZmiss;
-    MORSE_descC12		= data->descC12;
-    MORSE_descC22		= data->descC22;
-    MORSE_descmse		= data->descmse;
-    MORSE_descmse1           = data->descmse1;
-    MORSE_descmse2           = data->descmse2;
-    MORSE_descZactual	= data->descZactual;
-    MORSE_descZobs		= data->descZobs;
+	//Initiate data descriptors
+	MORSE_descZmiss		= data->descZmiss;
+	MORSE_descC12		= data->descC12;
+	MORSE_descC22		= data->descC22;
+	MORSE_descmse		= data->descmse;
+	MORSE_descmse1           = data->descmse1;
+	MORSE_descmse2           = data->descmse2;
+	MORSE_descZactual	= data->descZactual;
+	MORSE_descZobs		= data->descZobs;
 
-    //Copy data to vectors 
-    VERBOSE("Copy measurments vector to descZobs descriptor...");
-    //MORSE_MLE_dzcpy_Tile_Async(MORSE_descZobs, Zobs, msequence, mrequest);
-    MORSE_Lapack_to_Tile( Zobs, nZobs, MORSE_descZobs);
-    VERBOSE(" Done.\n");
+	//Copy data to vectors 
+	VERBOSE("Copy measurments vector to descZobs descriptor...");
+	//MORSE_MLE_dzcpy_Tile_Async(MORSE_descZobs, Zobs, msequence, mrequest);
+	MORSE_Lapack_to_Tile( Zobs, nZobs, MORSE_descZobs);
+	VERBOSE(" Done.\n");
 
-    if( Zactual != NULL)	
-    {
-        VERBOSE("Copy actual measurments vector to descZactual descriptor...");
-        //MORSE_MLE_dzcpy_Tile_Async(MORSE_descZactual, Zactual, msequence, mrequest);
-        MORSE_Lapack_to_Tile( Zactual, nZmiss, MORSE_descZactual);
-        VERBOSE(" Done.\n");
-    }
+	if( Zactual != NULL)	
+	{
+		VERBOSE("Copy actual measurments vector to descZactual descriptor...");
+		//MORSE_MLE_dzcpy_Tile_Async(MORSE_descZactual, Zactual, msequence, mrequest);
+		MORSE_Lapack_to_Tile( Zactual, nZmiss, MORSE_descZactual);
+		VERBOSE(" Done.\n");
+	}
 
-    MORSE_Sequence_Wait(msequence);
-
-
-    //        int i=0;
-    //      for (i=0;i<nZmiss;i++)
-    //    printf("%f, %f, %f\n", data->lmiss.x[i], data->lmiss.y[i], Zactual[i]);
-
-    //printf("\n\n");
-
-    //	for (i=0;i<100;i++)
-    //	printf("%f, %f, %f\n", data->lobs.x[i], data->lobs.y[i], Zobs[i]);
-
-    //#if defined(CHAMELEON_USE_MPI)
-    //	MPI_Bcast(&data->variance,1, MPI_DOUBLE, 0, MPI_COMM_WORLD );
-    //#endif
-    //theta[0]=data->variance;
-    if(strcmp(data->kernel_fun, "univariate_matern_stationary")   == 0 || strcmp(data->kernel_fun, "univariate_pow_exp_stationary")   == 0 )
-        num_params = 3;
-    else if(strcmp(data->kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
-        num_params = 4;
-    else if(strcmp(data->kernel_fun, "univariate_matern_non_stationary")   == 0)
-        num_params = 9;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_flexible")   == 0)
-        num_params = 11;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
-        num_params = 6;
-    else if(strcmp(data->kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
-        num_params = 7;
-    else
-    {
-        fprintf(stderr,"Choosen kernel is not exist(1)!\n");
-        fprintf(stderr, "Called function is: %s\n",__func__);
-        exit(0);
-    }
-
-    printf("estimated parameters:");
-    int i = 0;
-    for(i=0; i<num_params; i++)
-    {
-        printf("%.8f,", theta[i]);
-
-    }
-    printf(")\n");
-    START_TIMING(mat_gen_time);
+	MORSE_Sequence_Wait(msequence);
 
 
+	//        int i=0;
+	//      for (i=0;i<nZmiss;i++)
+	//    printf("%f, %f, %f\n", data->lmiss.x[i], data->lmiss.y[i], Zactual[i]);
 
+	//printf("\n\n");
 
-    //double *Zobs_arr = (double *) malloc(nZobs * 1 * sizeof(double));
-    //MORSE_Tile_to_Lapack( MORSE_descZobs, Zobs_arr, nZobs);
-    //print_dmatrix("Zobs(16)", 16, 1, Zobs_arr, 1);
+	//	for (i=0;i<100;i++)
+	//	printf("%f, %f, %f\n", data->lobs.x[i], data->lobs.y[i], Zobs[i]);
 
-    //double *Zactual_arr = (double *) malloc(nZmiss * 1 * sizeof(double));
-    //MORSE_Tile_to_Lapack( MORSE_descZactual, Zactual_arr, nZmiss);
-    //print_dmatrix("Zactual(10)", 10, 1, Zactual_arr, 1);
+	//#if defined(CHAMELEON_USE_MPI)
+	//	MPI_Bcast(&data->variance,1, MPI_DOUBLE, 0, MPI_COMM_WORLD );
+	//#endif
+	//theta[0]=data->variance;
+	if(strcmp(data->kernel_fun, "univariate_matern_stationary")   == 0 || strcmp(data->kernel_fun, "univariate_pow_exp_stationary")   == 0 )
+		num_params = 3;
+	else if(strcmp(data->kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
+		num_params = 4;
+	else if(strcmp(data->kernel_fun, "univariate_matern_non_stationary")   == 0)
+		num_params = 9;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_flexible")   == 0)
+		num_params = 11;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious2_profile")   == 0)
+		num_params = 6;
+	else if(strcmp(data->kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
+		num_params = 7;
+	else
+	{
+		fprintf(stderr,"Choosen kernel is not exist(1)!\n");
+		fprintf(stderr, "Called function is: %s\n",__func__);
+		exit(0);
+	}
+
+	printf("estimated parameters:");
+	int i = 0;
+	for(i=0; i<num_params; i++)
+	{
+		printf("%.8f,", theta[i]);
+
+	}
+	printf(")\n");
+	START_TIMING(mat_gen_time);
 
 
 
-    //Generate C22 covariance matrix
-    VERBOSE("Generate C22 Covariance Matrix... (Prediction Stage)");
-    //MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC22, msequence, mrequest,  &data->lobs, &data->lobs, theta, data->dm);
-    MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC22, &data->lobs, &data->lobs, &data->lm, theta, data->dm, data->kernel_fun,  msequence, mrequest);
-    MORSE_Sequence_Wait(msequence);
-    //flops = flops + FLOPS_DPOTRF(nZobs);
-    VERBOSE(" Done.\n");
+
+	//double *Zobs_arr = (double *) malloc(nZobs * 1 * sizeof(double));
+	//MORSE_Tile_to_Lapack( MORSE_descZobs, Zobs_arr, nZobs);
+	//print_dmatrix("Zobs(16)", 16, 1, Zobs_arr, 1);
+
+	//double *Zactual_arr = (double *) malloc(nZmiss * 1 * sizeof(double));
+	//MORSE_Tile_to_Lapack( MORSE_descZactual, Zactual_arr, nZmiss);
+	//print_dmatrix("Zactual(10)", 10, 1, Zactual_arr, 1);
 
 
-    //printf("%s\n",  data->kernel_fun);
-    //double *C22_arr = (double *) malloc(nZobs * nZobs * sizeof(double));
-    //MORSE_Tile_to_Lapack( MORSE_descC22, C22_arr, nZobs);
-    //print_dmatrix("C22(10,10)", 10, 10, C22_arr, 10);
 
-    //Generate C12 covariance matrix
-    VERBOSE("Generate C12 Covariance Matrix... (Prediction Stage)");
-    //MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC12, msequence, mrequest,  &data->lmiss, &data->lobs, theta, data->dm);
-    MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC12, &data->lmiss, &data->lobs, &data->lm, theta, data->dm, data->kernel_fun,  msequence, mrequest);
-    MORSE_Sequence_Wait(msequence);
-    //flops = flops + FLOPS_DPOTRF(nZmiss);
-    VERBOSE(" Done.\n");
-    STOP_TIMING(mat_gen_time);
+	//Generate C22 covariance matrix
+	VERBOSE("Generate C22 Covariance Matrix... (Prediction Stage)");
+	//MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC22, msequence, mrequest,  &data->lobs, &data->lobs, theta, data->dm);
+	MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC22, &data->lobs, &data->lobs, &data->lm, theta, data->dm, data->kernel_fun,  msequence, mrequest);
+	MORSE_Sequence_Wait(msequence);
+	//flops = flops + FLOPS_DPOTRF(nZobs);
+	VERBOSE(" Done.\n");
 
 
-    //printf("%s\n",  data->kernel_fun);
-    //double *C12_arr = (double *) malloc(nZobs * nZmiss * sizeof(double));
-    //MORSE_Tile_to_Lapack( MORSE_descC12, C12_arr, nZmiss);
-    //print_dmatrix("C12(10,10)", 10, 10, C12_arr, 10);
+	//printf("%s\n",  data->kernel_fun);
+	//double *C22_arr = (double *) malloc(nZobs * nZobs * sizeof(double));
+	//MORSE_Tile_to_Lapack( MORSE_descC22, C22_arr, nZobs);
+	//print_dmatrix("C22(10,10)", 10, 10, C22_arr, 10);
 
-    START_TIMING(time_solve);
-    //Start prediction
-    VERBOSE("Calculate dposv C22 Covariance Matrix... (Prediction Stage)");
-    MORSE_dposv_Tile(MorseLower, MORSE_descC22, MORSE_descZobs);
-    flops = flops + FLOPS_DPOTRF(nZobs);
-    flops = flops + FLOPS_DTRSM(MorseLeft, MORSE_descC22->m, MORSE_descZobs->n);
-    VERBOSE(" Done.\n");
-    STOP_TIMING(time_solve);
-
-
-    START_TIMING(time_gemm);
-    VERBOSE("Calculate dgemm Zmiss= C12 * Zobs Covariance Matrix... (Prediction Stage)");
-    MORSE_dgemm_Tile (MorseNoTrans, MorseNoTrans, 1, MORSE_descC12, MORSE_descZobs, 0, MORSE_descZmiss);
-    flops = flops + FLOPS_DGEMM(MORSE_descC12->m, MORSE_descZobs->n, MORSE_descZmiss->n);
-    VERBOSE(" Done.\n");
-    STOP_TIMING(time_gemm);
-
-    //printf("%s\n",  data->kernel_fun);
-    //double *Zmiss_arr = (double *) malloc(nZmiss * 1 * sizeof(double));
-    //MORSE_Tile_to_Lapack( MORSE_descZmiss, Zmiss_arr, nZobs);
-    //print_dmatrix("Zmiss(10)", 10, 1, Zmiss_arr, 1);
-    //	exit(0);
-
-    //return back descZmiss to zmiss vector
-    MORSE_Tile_to_Lapack( MORSE_descZmiss, Zmiss, nZmiss);
-
-    //Estimate Mean Square Error
-    if( Zactual != NULL)
-    {
-	    START_TIMING(time_mse);
-	    VERBOSE("Calculate Mean Square Error (MSE) ... (Prediction Stage) \n");
-
-	    if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 ) 
-
-		    MORSE_MLE_dmse_bivariate_Tile_Async(MORSE_descZactual, MORSE_descZmiss, MORSE_descmse1, MORSE_descmse2, MORSE_descmse,  msequence, mrequest);
-	    else
-
-		    MORSE_MLE_dmse_Tile_Async(MORSE_descZactual, MORSE_descZmiss, MORSE_descmse, msequence, mrequest);
-	    MORSE_Sequence_Wait(msequence);
-	    VERBOSE(" Done.\n");	
-	    STOP_TIMING(time_mse);
-	    data->mserror  /= nZmiss;
-	    data->mserror1 /= (nZmiss/2);
-	    data->mserror2 /= (nZmiss/2);
-    }
-    else
-	    data->mserror = -1;
-
-#if defined(CHAMELEON_USE_MPI)
-    if(MORSE_My_Mpi_Rank() == 0)
-    {
-#endif
-
-	    double *z;
-	    //		z = (double *) malloc(nZmiss * sizeof(double));
-	    //		MORSE_Tile_to_Lapack( MORSE_descZmiss, z, nZmiss);
-	    //		write_pred_vector(z, data, nZmiss, data->mserror);
-	    //		free(z);
-	    if(data->log == 1)
-		    fprintf(data->pFileLog, "\n\n# of missing observations :%d\n\nPrediction Execution Time: %.8f, Flops: %.8f, Mean Square Error (MSE): %.8f\n\n", nZmiss,  (mat_gen_time+time_solve+time_mse), (flops / 1e9 / (time_solve)), data->mserror );
-
-	    write_prediction_result("predict_result.dat", n, data->hicma_acc, data->mserror1, data->mserror2, data->mserror, (mat_gen_time+time_solve+ time_gemm), (flops / 1e9 / (time_solve)));
+	//Generate C12 covariance matrix
+	VERBOSE("Generate C12 Covariance Matrix... (Prediction Stage)");
+	//MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC12, msequence, mrequest,  &data->lmiss, &data->lobs, theta, data->dm);
+	MORSE_MLE_dcmg_Tile_Async(MorseLower, MORSE_descC12, &data->lmiss, &data->lobs, &data->lm, theta, data->dm, data->kernel_fun,  msequence, mrequest);
+	MORSE_Sequence_Wait(msequence);
+	//flops = flops + FLOPS_DPOTRF(nZmiss);
+	VERBOSE(" Done.\n");
+	STOP_TIMING(mat_gen_time);
 
 
-	    //output
-	    results.mse_pred1 = data->mserror1;
-	    results.mse_pred2 = data->mserror2;
-	    results.mse_pred  = data->mserror;
-	    results.total_pred_time= /*mat_gen_time+*/time_solve+ time_gemm;
-	    results.total_pred_flops= flops / 1e9 / (time_solve + time_gemm);
+	//printf("%s\n",  data->kernel_fun);
+	//double *C12_arr = (double *) malloc(nZobs * nZmiss * sizeof(double));
+	//MORSE_Tile_to_Lapack( MORSE_descC12, C12_arr, nZmiss);
+	//print_dmatrix("C12(10,10)", 10, 10, C12_arr, 10);
+
+	START_TIMING(time_solve);
+	//Start prediction
+	VERBOSE("Calculate dposv C22 Covariance Matrix... (Prediction Stage)");
+	MORSE_dposv_Tile(MorseLower, MORSE_descC22, MORSE_descZobs);
+	flops = flops + FLOPS_DPOTRF(nZobs);
+	flops = flops + FLOPS_DTRSM(MorseLeft, MORSE_descC22->m, MORSE_descZobs->n);
+	VERBOSE(" Done.\n");
+	STOP_TIMING(time_solve);
+
+
+	START_TIMING(time_gemm);
+	VERBOSE("Calculate dgemm Zmiss= C12 * Zobs Covariance Matrix... (Prediction Stage)");
+	MORSE_dgemm_Tile (MorseNoTrans, MorseNoTrans, 1, MORSE_descC12, MORSE_descZobs, 0, MORSE_descZmiss);
+	flops = flops + FLOPS_DGEMM(MORSE_descC12->m, MORSE_descZobs->n, MORSE_descZmiss->n);
+	VERBOSE(" Done.\n");
+	STOP_TIMING(time_gemm);
+
+	//printf("%s\n",  data->kernel_fun);
+	//double *Zmiss_arr = (double *) malloc(nZmiss * 1 * sizeof(double));
+	//MORSE_Tile_to_Lapack( MORSE_descZmiss, Zmiss_arr, nZobs);
+	//print_dmatrix("Zmiss(10)", 10, 1, Zmiss_arr, 1);
+	//	exit(0);
+
+	//return back descZmiss to zmiss vector
+	MORSE_Tile_to_Lapack( MORSE_descZmiss, Zmiss, nZmiss);
+
+	//Estimate Mean Square Error
+	if( Zactual != NULL)
+	{
+		START_TIMING(time_mse);
+		VERBOSE("Calculate Mean Square Error (MSE) ... (Prediction Stage) \n");
+
+		if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious2")   == 0 || strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 ) 
+
+			MORSE_MLE_dmse_bivariate_Tile_Async(MORSE_descZactual, MORSE_descZmiss, MORSE_descmse1, MORSE_descmse2, MORSE_descmse,  msequence, mrequest);
+		else
+
+			MORSE_MLE_dmse_Tile_Async(MORSE_descZactual, MORSE_descZmiss, MORSE_descmse, msequence, mrequest);
+		MORSE_Sequence_Wait(msequence);
+		VERBOSE(" Done.\n");	
+		STOP_TIMING(time_mse);
+		data->mserror  /= nZmiss;
+		data->mserror1 /= (nZmiss/2);
+		data->mserror2 /= (nZmiss/2);
+	}
+	else
+		data->mserror = -1;
 
 #if defined(CHAMELEON_USE_MPI)
-    }
+	if(MORSE_My_Mpi_Rank() == 0)
+	{
 #endif
 
-    return data->mserror;
+		double *z;
+		//		z = (double *) malloc(nZmiss * sizeof(double));
+		//		MORSE_Tile_to_Lapack( MORSE_descZmiss, z, nZmiss);
+		//		write_pred_vector(z, data, nZmiss, data->mserror);
+		//		free(z);
+		if(data->log == 1)
+			fprintf(data->pFileLog, "\n\n# of missing observations :%d\n\nPrediction Execution Time: %.8f, Flops: %.8f, Mean Square Error (MSE): %.8f\n\n", nZmiss,  (mat_gen_time+time_solve+time_mse), (flops / 1e9 / (time_solve)), data->mserror );
+
+		write_prediction_result("predict_result.dat", n, data->hicma_acc, data->mserror1, data->mserror2, data->mserror, (mat_gen_time+time_solve+ time_gemm), (flops / 1e9 / (time_solve)));
+
+
+		//output
+		results.mse_pred1 = data->mserror1;
+		results.mse_pred2 = data->mserror2;
+		results.mse_pred  = data->mserror;
+		results.total_pred_time= /*mat_gen_time+*/time_solve+ time_gemm;
+		results.total_pred_flops= flops / 1e9 / (time_solve + time_gemm);
+
+#if defined(CHAMELEON_USE_MPI)
+	}
+#endif
+
+	return data->mserror;
 
 }
 
@@ -2397,6 +2493,12 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 	MORSE_desc_t *MORSE_descproduct1 = NULL;
 	MORSE_desc_t *MORSE_descproduct2 = NULL;
 	MORSE_desc_t *MORSE_descdet	 = NULL;
+	MORSE_desc_t *X  		 = NULL;
+	MORSE_desc_t *part2_vector       = NULL;
+	MORSE_desc_t *XtX                = NULL;
+	MORSE_desc_t *MORSE_descpart1    = NULL;
+	MORSE_desc_t *MORSE_descpart2    = NULL;
+
 	//MORSE_desc_t *MORSE_descZmiss	 = NULL;
 	//MORSE_desc_t *MORSE_descC12	 = NULL;
 	//MORSE_desc_t *MORSE_descC22	 = NULL;
@@ -2453,7 +2555,28 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 	//		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descC22, NULL, MorseRealDouble, dts, dts, dts * dts, nZobs, nZobs, 0, 0, nZobs, nZobs, p_grid, q_grid);
 	//		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descmse, &data->mserror, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
 	//	}
-	//Fill data struct
+
+	if(data->mean_trend ==1)
+	{
+		int M = data->M;
+		//Fill data struct
+		//	fprintf(stderr, "0000 %d, %d\n", N, (3+2*M));
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&X, NULL, MorseRealDouble, dts,dts,dts*dts,N,3+2*M,0,0,N,3+2*M,p_grid,q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&part2_vector, NULL, MorseRealDouble, dts,dts,dts*dts,3+2*M,1,0,0,3+2*M,1,p_grid,q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&XtX, NULL, MorseRealDouble, dts,dts,dts*dts,3+2*M,3+2*M,0,0,3+2*M,3+2*M,p_grid,q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descpart1, &data->part1, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descpart2, &data->part2, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
+
+
+		//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&forcing, NULL, MorseRealDouble, dts,dts,dts*dts,751,1,0,0,751,1,p_grid,q_grid);
+	}
+	//
+	//
+	//
+	//
+	//
+	data->descpart1		= MORSE_descpart1;
+	data->descpart2         = MORSE_descpart1;
 	data->descC		= MORSE_descC;
 	data->descsubC11        = MORSE_descsubC11;
 	data->descsubC12        = MORSE_descsubC12;
@@ -2467,6 +2590,11 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 	data->descproduct	= MORSE_descproduct;
 	data->descproduct1      = MORSE_descproduct1;
 	data->descproduct2      = MORSE_descproduct2;
+
+	data->X                 = X;	
+	data->part2_vector      = part2_vector;
+	data->XtX               = XtX;
+
 	//data->descZmiss		= MORSE_descZmiss;
 	//data->descC12		= MORSE_descC12;
 	//data->descC22		= MORSE_descC22;

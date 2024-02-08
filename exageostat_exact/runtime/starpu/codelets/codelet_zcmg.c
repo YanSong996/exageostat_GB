@@ -42,17 +42,23 @@ static void cl_dcmg_cpu_func(void *buffers[],void *cl_arg){
     starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &lm, &theta, &distance_metric, &kernel);//, &size);
 
     if(kernel == 0)
-        core_dcmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	    core_dcmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
     else if(kernel == 1)
-        core_dcmg_nono_stat(A, m, n, m0, n0, l1, l2, lm, theta, distance_metric);
+	    core_dcmg_nono_stat(A, m, n, m0, n0, l1, l2, lm, theta, distance_metric);
     else if(kernel == 2)
-        core_dcmg_bivariate_flexible(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	    core_dcmg_bivariate_flexible(A, m, n, m0, n0, l1, l2, theta, distance_metric);
     else if (kernel == 3) //parsimonious
-        core_dcmg_bivariate_parsimonious(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	    core_dcmg_bivariate_parsimonious(A, m, n, m0, n0, l1, l2, theta, distance_metric);
     else if (kernel == 4) 
-        core_dcmg_nuggets(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	    core_dcmg_nuggets(A, m, n, m0, n0, l1, l2, theta, distance_metric);
     else if (kernel == 5)
-        core_dcmg_spacetime_matern(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	    core_dcmg_spacetime_matern(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+    else if (kernel == 6)
+    {
+	//    fprintf(stderr, "before calling the core function: %f %f %f\n", theta[0], theta[1], theta[2]);
+	    core_dcmg_mean_trend(A, m, n, m0, n0, l1, l2, theta, distance_metric);  
+
+    }
     //    else if (kernel == 4) //parsimonious2
     //        core_dcmg_bivariate_parsimonious2(A, m, n, m0, n0, l1, l2, theta, distance_metric);//, size);
 }
@@ -61,58 +67,58 @@ static void cl_dcmg_cpu_func(void *buffers[],void *cl_arg){
 #if defined(EXAGEOSTAT_USE_CUDA)
 static void cl_dcmg_cuda_func(void *buffers[], void *cl_arg)
 {
-/*   
-    int m, n, m0, n0;
-    location *l1;
-    location *l2;
-    double *theta;
-    double *A;
-    int distance_metric;
-    theta   = (double *) malloc(3* sizeof(double));
-    A       = (double *)STARPU_MATRIX_GET_PTR(buffers[0]);
-    starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &theta[0], &theta[1], &theta[2], &distance_metric);
-    cudaStream_t stream = starpu_cuda_get_local_stream();
-    cuda_dcmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
-    cudaStreamSynchronize( stream );
-*/
+	/*   
+	     int m, n, m0, n0;
+	     location *l1;
+	     location *l2;
+	     double *theta;
+	     double *A;
+	     int distance_metric;
+	     theta   = (double *) malloc(3* sizeof(double));
+	     A       = (double *)STARPU_MATRIX_GET_PTR(buffers[0]);
+	     starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &theta[0], &theta[1], &theta[2], &distance_metric);
+	     cudaStream_t stream = starpu_cuda_get_local_stream();
+	     cuda_dcmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	     cudaStreamSynchronize( stream );
+	     */
 }
 #endif
 
 
 static struct starpu_codelet cl_dcmg =
 {
-    .where        = STARPU_CPU /*| STARPU_CUDA*/,
-    .cpu_func     = cl_dcmg_cpu_func,
+	.where        = STARPU_CPU /*| STARPU_CUDA*/,
+	.cpu_func     = cl_dcmg_cpu_func,
 #if defined(EXAGEOSTAT_USE_CUDA)
-    //    .cuda_func      = {cl_dcmg_cuda_func},
+	//    .cuda_func      = {cl_dcmg_cuda_func},
 #endif
-    .nbuffers     = 1,
-    .modes        = {STARPU_W},
-    .name         = "dcmg"
+	.nbuffers     = 1,
+	.modes        = {STARPU_W},
+	.name         = "dcmg"
 };
 
 //******************************************************************************
 static void cl_scmg_cpu_func(void *buffers[],void *cl_arg){
-    int m, n, m0, n0;
-    location *l1;
-    location *l2;
-    location *lm;
-    double *theta;
-    float *A;
-    int distance_metric;
-    int kernel;
-    A       = (float *)STARPU_MATRIX_GET_PTR(buffers[0]);
+	int m, n, m0, n0;
+	location *l1;
+	location *l2;
+	location *lm;
+	double *theta;
+	float *A;
+	int distance_metric;
+	int kernel;
+	A       = (float *)STARPU_MATRIX_GET_PTR(buffers[0]);
 
-    starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &lm, &theta, &distance_metric, &kernel);
+	starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &lm, &theta, &distance_metric, &kernel);
 
-    if(kernel == 0)
-        core_scmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
-    //    else if(kernel == 1)
-    //        core_scmg_nono_stat(A, m, n, m0, n0, l1, l2, lm, theta, distance_metric);
-    //    else if(kernel == 2)
-    //        core_scmg_bivariate_flexible(A, m, n, m0, n0, l1, l2,  theta, distance_metric);
-    //    else if (kernel == 3)
-    //        core_scmg_bivariate_parsimonious(A, m, n, m0, n0, l1, l2,  theta, distance_metric);
+	if(kernel == 0)
+		core_scmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	//    else if(kernel == 1)
+	//        core_scmg_nono_stat(A, m, n, m0, n0, l1, l2, lm, theta, distance_metric);
+	//    else if(kernel == 2)
+	//        core_scmg_bivariate_flexible(A, m, n, m0, n0, l1, l2,  theta, distance_metric);
+	//    else if (kernel == 3)
+	//        core_scmg_bivariate_parsimonious(A, m, n, m0, n0, l1, l2,  theta, distance_metric);
 }
 
 /*
@@ -137,38 +143,38 @@ cudaStreamSynchronize( stream );
 
 static struct starpu_codelet cl_scmg =
 {
-    .where          = STARPU_CPU | STARPU_CUDA,
-    .cpu_func       = cl_scmg_cpu_func,
+	.where          = STARPU_CPU | STARPU_CUDA,
+	.cpu_func       = cl_scmg_cpu_func,
 #if defined(EXAGEOSTAT_USE_CUDA)
-    //    .cuda_func      = {cl_scmg_cuda_func},
+	//    .cuda_func      = {cl_scmg_cuda_func},
 #endif
-    .nbuffers       = 1,
-    .modes          = STARPU_W,
-    .name           = "scmg"
+	.nbuffers       = 1,
+	.modes          = STARPU_W,
+	.name           = "scmg"
 };
 
 //******************************************************************************
 static void cl_sdcmg_cpu_func(void *buffers[],void *cl_arg){
-    int m, n, m0, n0;
-    location *l1;
-    location *l2;
-    location *lm;
-    double *theta;
-    float *A;
-    int distance_metric;
-    int kernel;
-    A       = (float *)STARPU_MATRIX_GET_PTR(buffers[0]);
+	int m, n, m0, n0;
+	location *l1;
+	location *l2;
+	location *lm;
+	double *theta;
+	float *A;
+	int distance_metric;
+	int kernel;
+	A       = (float *)STARPU_MATRIX_GET_PTR(buffers[0]);
 
-    starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &lm, &theta, &distance_metric, &kernel);
+	starpu_codelet_unpack_args(cl_arg, &m, &n, &m0, &n0, &l1, &l2, &lm, &theta, &distance_metric, &kernel);
 
-    if(kernel == 0)
-        core_sdcmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
-    //    else if(kernel == 1)
-    //        core_sdcmg_nono_stat(A, m, n, m0, n0, l1, l2, lm, theta, distance_metric);
-    //    else if(kernel == 2)
-    //        core_sdcmg_bivariate_flexible(A, m, n, m0, n0, l1, l2, theta, distance_metric);
-    //    else if (kernel == 3)
-    //        core_sdcmg_bivariate_parsimonious(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	if(kernel == 0)
+		core_sdcmg(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	//    else if(kernel == 1)
+	//        core_sdcmg_nono_stat(A, m, n, m0, n0, l1, l2, lm, theta, distance_metric);
+	//    else if(kernel == 2)
+	//        core_sdcmg_bivariate_flexible(A, m, n, m0, n0, l1, l2, theta, distance_metric);
+	//    else if (kernel == 3)
+	//        core_sdcmg_bivariate_parsimonious(A, m, n, m0, n0, l1, l2, theta, distance_metric);
 }
 /*
 #if defined(EXAGEOSTAT_USE_CUDA)
@@ -191,14 +197,14 @@ cudaStreamSynchronize( stream );
 */
 static struct starpu_codelet cl_sdcmg =
 {
-    .where          = STARPU_CPU | STARPU_CUDA,
-    .cpu_func       = cl_sdcmg_cpu_func,
+	.where          = STARPU_CPU | STARPU_CUDA,
+	.cpu_func       = cl_sdcmg_cpu_func,
 #if defined(EXAGEOSTAT_USE_CUDA)
-    //    .cuda_func      = {cl_sdcmg_cuda_func},
+	//    .cuda_func      = {cl_sdcmg_cuda_func},
 #endif
-    .nbuffers       = 1,
-    .modes          = {STARPU_W},
-    .name           = "sdcmg"
+	.nbuffers       = 1,
+	.modes          = {STARPU_W},
+	.name           = "sdcmg"
 };
 
 /*******************************************************************************
@@ -248,82 +254,86 @@ static struct starpu_codelet cl_sdcmg =
  ******************************************************************************/
 //****************************************************
 int MORSE_MLE_dcmg_Tile_Async(MORSE_enum uplo, MORSE_desc_t *descA, location *l1,
-        location *l2, location *lm,  double *theta,
-        char *dm, char *kernel_fun,
-        MORSE_sequence_t *sequence, MORSE_request_t  *request) {
+		location *l2, location *lm,  double *theta,
+		char *dm, char *kernel_fun,
+		MORSE_sequence_t *sequence, MORSE_request_t  *request) {
 
-    MORSE_context_t *morse;
-    MORSE_option_t options;
-    morse = morse_context_self();
-
-
-    if (sequence->status != MORSE_SUCCESS)
-        return -2;
-    RUNTIME_options_init(&options, morse, sequence, request);
+	MORSE_context_t *morse;
+	MORSE_option_t options;
+	morse = morse_context_self();
 
 
-    int m, n, m0, n0;
-    int distance_metric     = strcmp(dm, "gc") == 0? 1 : 0;
-    int kernel;
+	if (sequence->status != MORSE_SUCCESS)
+		return -2;
+	RUNTIME_options_init(&options, morse, sequence, request);
 
-    if(strcmp(kernel_fun, "univariate_matern_stationary")   == 0)
-        kernel = 0;
-    else if(strcmp(kernel_fun, "univariate_matern_non_stationary")   == 0)
-        kernel = 1;
-    else if(strcmp(kernel_fun, "bivariate_matern_flexible")   == 0)
-        kernel = 2;
-    else if(strcmp(kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
-        kernel = 3;
-    else if(strcmp(kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
-        kernel = 4;
-    else if(strcmp(kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
-        kernel = 5;
-    else
-    {
-        fprintf(stderr,"Choosen kernel is not exist: %s!\n", kernel_fun);
-        fprintf(stderr, "Called function is: %s\n", __func__);
-        exit(0);
-    }
-    int tempmm, tempnn;
-    MORSE_desc_t A = *descA;
-    struct starpu_codelet *cl=&cl_dcmg;
-    int size = A.n;
 
-    for (n = 0; n < A.nt; n++) {
-        tempnn = n == A.nt -1 ? A.n - n * A.nb : A.nb;
-        if(uplo == MorseUpperLower)
-            m = 0;
-        else
-            m = A.m == A.n? n : 0;
-        for(; m < A.mt; m++)
-        {
+	int m, n, m0, n0;
+	int distance_metric     = strcmp(dm, "gc") == 0? 1 : 0;
+	int kernel;
 
-            tempmm = m == A.mt -1 ? A.m- m* A.mb : A.mb;
-            m0= m * A.mb;
-            n0= n * A.nb;
-            starpu_insert_task(starpu_mpi_codelet(cl),
-                    STARPU_VALUE, &tempmm, sizeof(int),
-                    STARPU_VALUE, &tempnn, sizeof(int),
-                    STARPU_VALUE, &m0, sizeof(int),
-                    STARPU_VALUE, &n0, sizeof(int),
-                    STARPU_W    , EXAGEOSTAT_RTBLKADDR(descA, MorseRealDouble, m, n),
-                    STARPU_VALUE, &l1, sizeof(location*),
-                    STARPU_VALUE, &l2, sizeof(location*),
-                    STARPU_VALUE, &lm, sizeof(location*),
-                    STARPU_VALUE, &theta, sizeof(double*),
-                    STARPU_VALUE, &distance_metric, sizeof(int),
-                    STARPU_VALUE, &kernel, sizeof(int),
-                    //STARPU_VALUE, &size, sizeof(int),
-                    //STARPU_VALUE, &num_locs, sizeof(int),
-                    //STARPU_VALUE, &num_params, sizeof(int),
-                    0);
-        }
+	if(strcmp(kernel_fun, "univariate_matern_stationary")   == 0)
+		kernel = 0;
+	else if(strcmp(kernel_fun, "univariate_matern_non_stationary")   == 0)
+		kernel = 1;
+	else if(strcmp(kernel_fun, "bivariate_matern_flexible")   == 0)
+		kernel = 2;
+	else if(strcmp(kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
+		kernel = 3;
+	else if(strcmp(kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
+		kernel = 4;
+	else if(strcmp(kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
+		kernel = 5;
+	else if(strcmp(kernel_fun, "trend_model")   == 0)
+		kernel = 6;
+	else
+	{
+		fprintf(stderr,"Choosen kernel is not exist: %s!\n", kernel_fun);
+		fprintf(stderr, "Called function is: %s\n", __func__);
+		exit(0);
+	}
+	int tempmm, tempnn;
+	MORSE_desc_t A = *descA;
+	struct starpu_codelet *cl=&cl_dcmg;
+	int size = A.n;
 
-    }
+	for (n = 0; n < A.nt; n++) {
+		tempnn = n == A.nt -1 ? A.n - n * A.nb : A.nb;
+		if(uplo == MorseUpperLower)
+			m = 0;
+		else
+			m = A.m == A.n? n : 0;
+		for(; m < A.mt; m++)
+		{
 
-    RUNTIME_options_ws_free(&options);
-    RUNTIME_options_finalize(&options, morse);
-    return MORSE_SUCCESS;
+			tempmm = m == A.mt -1 ? A.m- m* A.mb : A.mb;
+			m0= m * A.mb;
+			n0= n * A.nb;
+//			        fprintf(stderr, "%d %d %d %d %d=== %f %f %f \n", tempmm, tempnn, m0, n0, kernel, theta[0], theta[1], theta[2]);
+  //      exit(0);
+			starpu_insert_task(starpu_mpi_codelet(cl),
+					STARPU_VALUE, &tempmm, sizeof(int),
+					STARPU_VALUE, &tempnn, sizeof(int),
+					STARPU_VALUE, &m0, sizeof(int),
+					STARPU_VALUE, &n0, sizeof(int),
+					STARPU_W    , EXAGEOSTAT_RTBLKADDR(descA, MorseRealDouble, m, n),
+					STARPU_VALUE, &l1, sizeof(location*),
+					STARPU_VALUE, &l2, sizeof(location*),
+					STARPU_VALUE, &lm, sizeof(location*),
+					STARPU_VALUE, &theta, sizeof(double*),
+					STARPU_VALUE, &distance_metric, sizeof(int),
+					STARPU_VALUE, &kernel, sizeof(int),
+					//STARPU_VALUE, &size, sizeof(int),
+					//STARPU_VALUE, &num_locs, sizeof(int),
+					//STARPU_VALUE, &num_params, sizeof(int),
+					0);
+		}
+
+	}
+
+	RUNTIME_options_ws_free(&options);
+	RUNTIME_options_finalize(&options, morse);
+	return MORSE_SUCCESS;
 }
 /*******************************************************************************
  *
@@ -370,165 +380,165 @@ int MORSE_MLE_dcmg_Tile_Async(MORSE_enum uplo, MORSE_desc_t *descA, location *l1
 
 
 int MORSE_MLE_scmg_Tile_Async(MORSE_enum uplo, MORSE_desc_t *descA, location *l1,
-        location *l2, location *lm,  double *theta,
-        char *dm, char *kernel_fun,
-        MORSE_sequence_t *sequence, MORSE_request_t  *request) {
+		location *l2, location *lm,  double *theta,
+		char *dm, char *kernel_fun,
+		MORSE_sequence_t *sequence, MORSE_request_t  *request) {
 
-    MORSE_context_t *morse;
-    MORSE_option_t options;
-    morse = morse_context_self();
-
-
-    if (sequence->status != MORSE_SUCCESS)
-        return -2;
-    RUNTIME_options_init(&options, morse, sequence, request);
+	MORSE_context_t *morse;
+	MORSE_option_t options;
+	morse = morse_context_self();
 
 
-    int m, n, m0, n0;
-    int distance_metric     = strcmp(dm, "gc") == 0? 1 : 0;
-    int kernel;
+	if (sequence->status != MORSE_SUCCESS)
+		return -2;
+	RUNTIME_options_init(&options, morse, sequence, request);
 
-    if(strcmp(kernel_fun, "univariate_matern_stationary")   == 0)
-        kernel = 0;
-    else if(strcmp(kernel_fun, "univariate_matern_non_stationary")   == 0)
-        kernel = 1;
-    else if(strcmp(kernel_fun, "bivariate_matern_flexible")   == 0)
-        kernel = 2;
-    else if(strcmp(kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
-        kernel = 3;
-    else if(strcmp(kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
-        kernel = 4;
-    else if(strcmp(kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
-        kernel = 5;
-    else
-    {
-        fprintf(stderr,"Choosen kernel is not exist(5)!\n");
-        fprintf(stderr, "Called function is: %s\n",__func__);
-        exit(0);
-    }
 
-    int tempmm, tempnn;
-    MORSE_desc_t A = *descA;
-    struct starpu_codelet *cl=&cl_scmg;
+	int m, n, m0, n0;
+	int distance_metric     = strcmp(dm, "gc") == 0? 1 : 0;
+	int kernel;
 
-    for (n = 0; n < A.nt; n++) {
-        tempnn = n == A.nt -1 ? A.n - n * A.nb : A.nb;
-        if(uplo == MorseUpperLower)
-            m = 0;
-        else
-            m = A.m == A.n? n : 0;
-        for(; m < A.mt; m++)
-        {
+	if(strcmp(kernel_fun, "univariate_matern_stationary")   == 0)
+		kernel = 0;
+	else if(strcmp(kernel_fun, "univariate_matern_non_stationary")   == 0)
+		kernel = 1;
+	else if(strcmp(kernel_fun, "bivariate_matern_flexible")   == 0)
+		kernel = 2;
+	else if(strcmp(kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
+		kernel = 3;
+	else if(strcmp(kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
+		kernel = 4;
+	else if(strcmp(kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
+		kernel = 5;
+	else
+	{
+		fprintf(stderr,"Choosen kernel is not exist(5)!\n");
+		fprintf(stderr, "Called function is: %s\n",__func__);
+		exit(0);
+	}
 
-            tempmm = m == A.mt -1 ? A.m- m* A.mb : A.mb;
-            m0= m * A.mb;
-            n0= n * A.nb;
-            starpu_insert_task(starpu_mpi_codelet(cl),
-                    STARPU_VALUE, &tempmm, sizeof(int),
-                    STARPU_VALUE, &tempnn, sizeof(int),
-                    STARPU_VALUE, &m0, sizeof(int),
-                    STARPU_VALUE, &n0, sizeof(int),
-                    STARPU_W    , EXAGEOSTAT_RTBLKADDR(descA, MorseRealFloat, m, n),
-                    STARPU_VALUE, &l1, sizeof(location*),
-                    STARPU_VALUE, &l2, sizeof(location*),
-                    STARPU_VALUE, &lm, sizeof(location*),
-                    STARPU_VALUE, &theta, sizeof(double*),
-                    STARPU_VALUE, &distance_metric, sizeof(int),
-                    STARPU_VALUE, &kernel, sizeof(int),
-                    //STARPU_VALUE, &num_locs, sizeof(int),
-                    //STARPU_VALUE, &num_params, sizeof(int),
-                    0);
-        }
+	int tempmm, tempnn;
+	MORSE_desc_t A = *descA;
+	struct starpu_codelet *cl=&cl_scmg;
 
-    }
+	for (n = 0; n < A.nt; n++) {
+		tempnn = n == A.nt -1 ? A.n - n * A.nb : A.nb;
+		if(uplo == MorseUpperLower)
+			m = 0;
+		else
+			m = A.m == A.n? n : 0;
+		for(; m < A.mt; m++)
+		{
 
-    RUNTIME_options_ws_free(&options);
-    RUNTIME_options_finalize(&options, morse);
-    return MORSE_SUCCESS;
+			tempmm = m == A.mt -1 ? A.m- m* A.mb : A.mb;
+			m0= m * A.mb;
+			n0= n * A.nb;
+			starpu_insert_task(starpu_mpi_codelet(cl),
+					STARPU_VALUE, &tempmm, sizeof(int),
+					STARPU_VALUE, &tempnn, sizeof(int),
+					STARPU_VALUE, &m0, sizeof(int),
+					STARPU_VALUE, &n0, sizeof(int),
+					STARPU_W    , EXAGEOSTAT_RTBLKADDR(descA, MorseRealFloat, m, n),
+					STARPU_VALUE, &l1, sizeof(location*),
+					STARPU_VALUE, &l2, sizeof(location*),
+					STARPU_VALUE, &lm, sizeof(location*),
+					STARPU_VALUE, &theta, sizeof(double*),
+					STARPU_VALUE, &distance_metric, sizeof(int),
+					STARPU_VALUE, &kernel, sizeof(int),
+					//STARPU_VALUE, &num_locs, sizeof(int),
+					//STARPU_VALUE, &num_params, sizeof(int),
+					0);
+		}
+
+	}
+
+	RUNTIME_options_ws_free(&options);
+	RUNTIME_options_finalize(&options, morse);
+	return MORSE_SUCCESS;
 }
 
 /*******************************************************************************/
 int MORSE_MLE_sdcmg_Tile_Async(MORSE_enum uplo, MORSE_desc_t *descA, location *l1,
-        location *l2, location *lm,  double *theta,
-        char *dm, char *kernel_fun,
-        MORSE_sequence_t *sequence, MORSE_request_t  *request) {
+		location *l2, location *lm,  double *theta,
+		char *dm, char *kernel_fun,
+		MORSE_sequence_t *sequence, MORSE_request_t  *request) {
 
-    MORSE_context_t *morse;
-    MORSE_option_t options;
-    morse = morse_context_self();
-
-
-    if (sequence->status != MORSE_SUCCESS)
-        return -2;
-    RUNTIME_options_init(&options, morse, sequence, request);
+	MORSE_context_t *morse;
+	MORSE_option_t options;
+	morse = morse_context_self();
 
 
-    int m, n, m0, n0;
-    int distance_metric = strcmp(dm,"gc") == 0? 1 : 0 ;
-    int kernel;
-
-    if(strcmp(kernel_fun, "univariate_matern_stationary")   == 0)
-        kernel = 0;
-    else if(strcmp(kernel_fun, "univariate_matern_non_stationary")   == 0)
-        kernel = 1;
-    else if(strcmp(kernel_fun, "bivariate_matern_flexible")   == 0)
-        kernel = 2;
-    else if(strcmp(kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 )
-        kernel = 3;
-    else if(strcmp(kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
-        kernel = 4;
-    else if(strcmp(kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
-        kernel = 5;
-    else
-    {
-        fprintf(stderr,"Choosen kernel is not exist(3)!\n");
-        fprintf(stderr, "Called function is: %s\n",__func__);
-        exit(0);
-    }
+	if (sequence->status != MORSE_SUCCESS)
+		return -2;
+	RUNTIME_options_init(&options, morse, sequence, request);
 
 
-    int tempmm, tempnn;
-    MORSE_desc_t A = *descA;
-    struct starpu_codelet *dcl = &cl_dcmg;
-    struct starpu_codelet *sdcl = &cl_sdcmg;
+	int m, n, m0, n0;
+	int distance_metric = strcmp(dm,"gc") == 0? 1 : 0 ;
+	int kernel;
 
-    int k = 0;
-    for (n = 0; n < A.nt; n++) {
-        tempnn = n == A.nt -1 ? A.n - n * A.nb : A.nb;
-        if(uplo == MorseUpperLower)
-            m = 0;
-        else
-            m = A.m == A.n? n : 0;
-        for(; m < A.mt; m++)
-        {
-
-            tempmm = m == A.mt -1 ? A.m- m* A.mb : A.mb;
-            m0= m * A.mb;
-            n0= n * A.nb;
-            starpu_insert_task(starpu_mpi_codelet(dcl),
-                    STARPU_VALUE, &tempmm, sizeof(int),
-                    STARPU_VALUE, &tempnn, sizeof(int),
-                    STARPU_VALUE, &m0, sizeof(int),
-                    STARPU_VALUE, &n0, sizeof(int),
-                    STARPU_W    , EXAGEOSTAT_RTBLKADDR(descA, MorseRealDouble, m, n),
-                    STARPU_VALUE, &l1, sizeof(location*),
-                    STARPU_VALUE, &l2, sizeof(location*),
-                    STARPU_VALUE, &lm, sizeof(location*),
-                    STARPU_VALUE, &theta, sizeof(double*),
-                    STARPU_VALUE, &distance_metric, sizeof(int),
-                    STARPU_VALUE, &kernel, sizeof(int),
-                    //STARPU_VALUE, &num_locs, sizeof(int),
-                    //STARPU_VALUE, &num_params, sizeof(int),
-                    0);
-        }
-
-    }
+	if(strcmp(kernel_fun, "univariate_matern_stationary")   == 0)
+		kernel = 0;
+	else if(strcmp(kernel_fun, "univariate_matern_non_stationary")   == 0)
+		kernel = 1;
+	else if(strcmp(kernel_fun, "bivariate_matern_flexible")   == 0)
+		kernel = 2;
+	else if(strcmp(kernel_fun, "bivariate_matern_parsimonious")   == 0 || strcmp(kernel_fun, "bivariate_matern_parsimonious_profile")   == 0 )
+		kernel = 3;
+	else if(strcmp(kernel_fun, "univariate_matern_nuggets_stationary")   == 0)
+		kernel = 4;
+	else if(strcmp(kernel_fun, "univariate_spacetime_matern_stationary")   == 0)
+		kernel = 5;
+	else
+	{
+		fprintf(stderr,"Choosen kernel is not exist(3)!\n");
+		fprintf(stderr, "Called function is: %s\n",__func__);
+		exit(0);
+	}
 
 
-    //RUNTIME_data_flush( sequence, descA );
-    //MORSE_TASK_flush_desc( &options, MorseUpperLower, descA);
-    RUNTIME_options_ws_free(&options);
-    RUNTIME_options_finalize(&options, morse);
-    //MORSE_TASK_dataflush_all();
-    return MORSE_SUCCESS;
+	int tempmm, tempnn;
+	MORSE_desc_t A = *descA;
+	struct starpu_codelet *dcl = &cl_dcmg;
+	struct starpu_codelet *sdcl = &cl_sdcmg;
+
+	int k = 0;
+	for (n = 0; n < A.nt; n++) {
+		tempnn = n == A.nt -1 ? A.n - n * A.nb : A.nb;
+		if(uplo == MorseUpperLower)
+			m = 0;
+		else
+			m = A.m == A.n? n : 0;
+		for(; m < A.mt; m++)
+		{
+
+			tempmm = m == A.mt -1 ? A.m- m* A.mb : A.mb;
+			m0= m * A.mb;
+			n0= n * A.nb;
+			starpu_insert_task(starpu_mpi_codelet(dcl),
+					STARPU_VALUE, &tempmm, sizeof(int),
+					STARPU_VALUE, &tempnn, sizeof(int),
+					STARPU_VALUE, &m0, sizeof(int),
+					STARPU_VALUE, &n0, sizeof(int),
+					STARPU_W    , EXAGEOSTAT_RTBLKADDR(descA, MorseRealDouble, m, n),
+					STARPU_VALUE, &l1, sizeof(location*),
+					STARPU_VALUE, &l2, sizeof(location*),
+					STARPU_VALUE, &lm, sizeof(location*),
+					STARPU_VALUE, &theta, sizeof(double*),
+					STARPU_VALUE, &distance_metric, sizeof(int),
+					STARPU_VALUE, &kernel, sizeof(int),
+					//STARPU_VALUE, &num_locs, sizeof(int),
+					//STARPU_VALUE, &num_params, sizeof(int),
+					0);
+		}
+
+	}
+
+
+	//RUNTIME_data_flush( sequence, descA );
+	//MORSE_TASK_flush_desc( &options, MorseUpperLower, descA);
+	RUNTIME_options_ws_free(&options);
+	RUNTIME_options_finalize(&options, morse);
+	//MORSE_TASK_dataflush_all();
+	return MORSE_SUCCESS;
 }

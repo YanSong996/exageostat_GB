@@ -161,6 +161,7 @@ void init_data_values(MLE_data *data)
     data->recovery_file		        = "";
     data->time_slots		        = 0;
     data->idw			            = 0 ;
+   data->mean_trend				=0;
 }
 
 
@@ -774,7 +775,7 @@ void print_dmatrix(char* desc, int m, int n, double* a, int lda)
     fprintf(stderr,"\n %s\n", desc);
     for (i = 0; i < m; i++) {
         for (j = 0; j < n; j++)
-            fprintf(stderr, " %6.4e", a[i + lda * j]);
+            fprintf(stderr, " %e", a[i + lda * j]);
         fprintf(stderr,"\n");
     }
 }
