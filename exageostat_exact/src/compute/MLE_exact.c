@@ -18,6 +18,8 @@
  *
  **/
 #include "../include/MLE_exact.h"
+#include <complex.h>
+
 //***************************************************************************************
 void MORSE_MLE_dzvg_Tile (MLE_data *data,  double * Nrand, double * initial_theta, int n, int dts, int log)
     //! Generate Observations Vector (Z) for testing Maximum
@@ -344,52 +346,140 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 		    data->dm, "trend_model",  msequence, mrequest);
 
 
-//    fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
-//    double *C = (double *) malloc(N *15 *sizeof(double));
- //   MORSE_Tile_to_Lapack( X, C, N);
+
+
+
+    fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
+    double *C = (double *) malloc(N *15 *sizeof(double));
+   MORSE_Tile_to_Lapack( X, C, N);
+
+  // double sum =0.0;
+  // int count =0;
+   /*
+   for(int i=N;i<N*2 ;i++)
+   {
+	   sum +=C[i];
+	   if(C[i] != 0.3235500048246540)
+	   {		   fprintf(stderr, "\nC[i]: %0.16f\n", C[i]);
+		   exit(0);
+	   }
+	   count++;
+   }
+   fprintf(stderr, "\nsum(X): %0.16f --- %d --- %0.16f\n", sum, count, (0.3235500048246540*count));
+   exit(0);
+*/
   //  print_dmatrix("testC", N, 15, C, N);
+//   exit(0);
+   //***********************************
 
-    //***********************************
+   //calculate part1
+   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
 
-    //calculate part1
-    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
+   //    fprintf(stderr, "data->part1: %f\n", data->part1);
+   //   exit(0); 
+   //exit(0);
+   //          double *z = (double *) malloc(N * sizeof(double));
+   //         MORSE_Tile_to_Lapack( Zobs, z, N);
+   //double sum =0;
+   //   for(int i=0;i<N;i++)
+   //   {
+   //	    sum += z[i];
+   //   }
+   //  fprintf(stderr, "sum(Zobs): %f\n", sum);
+   //    exit(0);
 
-    //fprintf(stderr, "%f\n", data->part1);
+   //Calculate part2
+   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
+
+
+    double *z = (double *) malloc(N * sizeof(double));
+    MORSE_Tile_to_Lapack( part2_vector, z, N);
+    double sum=0;
+   for(int i=0;i<15;i++)
+    {	sum+= z[i];
+   	   fprintf(stderr, "\n%f", z[i]);
+    }
+    fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);   
     //exit(0);
-    //       double *z = (double *) malloc(N * sizeof(double));
-    //        MORSE_Tile_to_Lapack( Zobs, z, N);
-    //for(int i=0;i<N;i++)
-    //fprintf(stderr, "%f\n", z[i]);
-    //exit(0);
 
-    //Calculate part2
-    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
 
-    //double *z = (double *) malloc(15 * sizeof(double));
-    //MORSE_Tile_to_Lapack( part2_vector, z, 15);
-    //for(int i=0;i<N;i++)
-    //   fprintf(stderr, "%f\n", z[i]);
-    //exit(0);
-
+   //double *z = (double *) malloc(15 * sizeof(double));
+   //MORSE_Tile_to_Lapack( part2_vector, z, 15);
+   //for(int i=0;i<N;i++)
+   //   fprintf(stderr, "%f\n", z[i]);
+   //exit(0);
 
 
     MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
 
-//    double *z = (double *) malloc(15 * 15* sizeof(double));
- //   MORSE_Tile_to_Lapack( XtX, z, 15);
-  //  print_dmatrix("XtX", 15, 15, z, 15);
 
 
-    MORSE_dpotrf_Tile(MorseLower,XtX);
-    MORSE_dtrtri_Tile(MorseLower,MorseNonUnit,XtX);
-    MORSE_dgemm_Tile(MorseNoTrans,MorseNoTrans,1.0,XtX,part2_vector,0.0,part2_vector);
-    //    gsl_blas_dgemv(CblasNoTrans,1.0,XtX,part2_vector,0.0,part2_vector);
-    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
+   double *XTX = (double *) malloc(15 * 15 *sizeof(double));
+   MORSE_Tile_to_Lapack( XtX, XTX, 15);
 
-    value=(-1.0)*log(data->part1-data->part2);
-    fprintf(stderr, "%f %f\n", value, theta[0]);
-    exit(0);
-    return value;
+   print_dmatrix("testC", 15, 15, XTX, 15);
+
+
+   int error = MORSE_dpotrf_Tile(MorseLower,XtX);
+   fprintf(stderr, "\n Cholesky is Okay %d\n", error);
+   //   MORSE_dtrtri_Tile(MorseLower,MorseNonUnit,XtX);
+
+
+
+   //to be optimized
+   /*    double *xtx_as_vec = (double *) malloc(15 * 15* sizeof(double));
+	 xtx_as_vec=XtX->mat;
+	 for(int i=0;i<15;i++)
+	 for(int j=0;j<15;j++)
+	 if(j>i)
+	 xtx_as_vec[i+15*j]=0;
+	 */
+
+  // MORSE_dlaset_Tile(MorseUpper, 0, 0, XtX);
+   double *L = (double *) malloc(15 * 15 *sizeof(double));
+   MORSE_Tile_to_Lapack( XtX, L, 15);
+
+//Okay
+   print_dmatrix("testC", 15, 15, L, 15);
+//    MORSE_dlaset_Tile(MorseUpperLower, 0, 0, data->descC);
+exit(0);
+
+
+   MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
+
+   //  MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
+
+   //int g=MORSE_dposv_Tile(MorseLower, XtX, part2_vector);
+   //fprintf(stderr, "\ng=%d\n", g);
+   //   double *z = (double *) malloc(N * sizeof(double));
+   //  MORSE_Tile_to_Lapack( part2_vector, z, N);
+   // double sum=0;
+   // for(int i=0;i<15;i++)
+   // { 
+   //	    sum+= z[i];
+   //	    fprintf(stderr, "\n%f", z[i]);
+   //   }
+   // fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);
+   //
+   
+      z = (double *) malloc(15 * sizeof(double));
+      MORSE_Tile_to_Lapack( part2_vector, z, 15);
+       sum=0;
+      for(int i=0;i<15;i++)
+      { 
+      sum+= z[i];
+      fprintf(stderr, "\n%.12f", z[i]);
+      }
+      fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);
+   
+   //    gsl_blas_dgemv(CblasNoTrans,1.0,XtX,part2_vector,0.0,part2_vector);
+   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
+
+   fprintf(stderr, "\ndata->part2: %e\n", data->part2);
+   value=(-1.0)*log(data->part1-data->part2);
+   fprintf(stderr, "%f %f\n", value, theta[0]);
+   exit(0);
+   return value;
 }
 
 
@@ -2608,4 +2698,156 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 
 }
 
+void MORSE_dmle_Call_phase_2(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, int q_grid, int N, int L)
+	//! //Initiate MORSE and allocate different descriptors for
+	/*!  CHAMELEON
+	 * Returns MLE_data data with initial values and new descriptors locations.
+	 * @param[in] data: MLE_data struct with different MLE inputs.
+	 * @param[in] ncores: number of CPU workers.
+	 * @param[in] gpus: number of GPU workers.
+	 * @param[in] dts: tile size (MB).
+	 * @param[in] p_grid: p_grid in the case of distributed system.
+	 * @param[in] q_grid: q_grid in the case of distributed system.
+	 * @param[in] N: number of spatial locations.
+	 * @param[in] nZobs: number of observed values (known observations).
+	 * @param[in] nZmiss: number of missing values (unknown observations).
+	 * */
+{
+	int T= data->T;
+	MORSE_sequence_t *msequence;
+	MORSE_request_t mrequest[2] = { MORSE_REQUEST_INITIALIZER, MORSE_REQUEST_INITIALIZER };
+	MORSE_desc_t MORSE_descFgt[T]; // Matrix of da for each time slot define on Sphere   (L+1)*2L---> where (L+1) is the number of lats, and L is the band limits
+	for(int i=0;i<T;i++)
+	{
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descFgt[i],NULL , MorseRealDouble, dts, dts, dts * dts, (L+1), (2*L), 0, 0, (L+1), (2*L), p_grid, q_grid);
+	}
 
+
+	MORSE_desc_t *D		= NULL;  // Diagonal matrix of size (2L-1) * (2L-1) 
+	MORSE_desc_t *Ep	= NULL;  // A matrix of complex exp of size (2L)*(2L-1)
+	//MORSE_desc_t *Epinv	= NULL;  // A matrix of complex exp of size (2L)*(2L-1) -- Inverse
+	MORSE_desc_t *Et1	= NULL;  // 
+	MORSE_desc_t *Et2       = NULL;  //       
+	MORSE_desc_t *P		= NULL;  // Permutation matrix of size (L-1)*(L+1)
+	//MORSE_desc_t Q[L];  	 // L* Wigner matrix of size (2L-1)*(2L-1)
+	MORSE_desc_t *W		= NULL;  // Wight matrix of size (2L-1) * (2L-1)
+	//MORSE_desc_t *Y		= NULL;  // Spherical hermonics matrix of size (L^2)*(L+1)
+	//MORSE_desc_t *R		= NULL;  // Reshape matrix of size (2L-1)*(L^2)
+	MORSE_desc_t *Ie        = NULL;  // Extension matrix for even order  (L)*(2L+1)
+	MORSE_desc_t *Io        = NULL;  // Extension matrix for odd order (L)*(2L+1)
+	MORSE_desc_t S[L];		  // 0.5(L^2+l) wigner materix  0.5(L^2+l)*L --- define as an array for 0.5(L^2+l)  vectors, each L
+	MORSE_desc_t *flm       = NULL;  // Coeffiecient vectors of size  L^2
+	MORSE_desc_t *flm_real	= NULL;  // Coeffiecient vectors of size  L^2
+
+
+	MORSE_desc_t *R1        = NULL;  
+	MORSE_desc_t *R2        = NULL;  
+	MORSE_desc_t *R3        = NULL;  
+	MORSE_desc_t *R4        = NULL;  
+	MORSE_desc_t R5[2*L-1];  
+	MORSE_desc_t R6[2*L-1];
+	MORSE_desc_t *R7        = NULL;
+
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&D, NULL, MorseRealDouble, dts, dts, dts * dts, (2*L-1), (2*L-1), 0, 0, (2*L-1), (2*L-1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Ep, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L), (2*L-1), 0, 0, (2*L), (2*L-1), p_grid, q_grid);
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Epinv, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L), (2*L-1), 0, 0, (2*L), (2*L-1), p_grid, q_grid);      
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Et1, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L-1), (L+1), 0, 0, (2*L-1), (L+1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Et2, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L-1), (L-1), 0, 0, (2*L-1), (L-1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&P, NULL, MorseRealDouble, dts, dts, dts * dts, (L-1), (L+1), 0, 0, (L-1), (L+1), p_grid, q_grid);      
+	//for(int i=0;i<2*L-1;i++)
+	//{
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Q[i],NULL , MorseComplexDouble, dts, dts, dts * dts, L, (2*L-1), 0, 0, L, (2*L-1), p_grid, q_grid);
+	//}
+
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&W, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L-1), (2*L-1), 0, 0, (2*L-1), (2*L-1), p_grid, q_grid);
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Y, NULL, MorseRealDouble, dts, dts, dts * dts, (L^2), (L-1), 0, 0, (L^2), (L-1), p_grid, q_grid);   
+	//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R, NULL, MorseRealDouble, dts, dts, dts * dts, (2*L-1), (L^2), 0, 0, (2*L-1), (L^2), p_grid, q_grid);      
+
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Ie, NULL, MorseInteger, dts, dts, dts * dts, L, (2*L-1), 0, 0, L, (2*L-1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&Io, NULL, MorseInteger, dts, dts, dts * dts, L, (2*L-1), 0, 0, L, (2*L-1), p_grid, q_grid);
+
+	for(int i=0;i<0.5*(L^2+L);i++)
+	{
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&S[i], NULL, MorseComplexDouble, dts, dts, dts * dts, L, 1, 0, 0, L, 1, p_grid, q_grid);
+	}
+
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&flm, NULL, MorseComplexDouble, dts, dts, dts * dts, L^2, 1, 0, 0, L^2, 1, p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&flm_real, NULL, MorseRealDouble, dts, dts, dts * dts, L^2, 1, 0, 0, L^2, 1, p_grid, q_grid);
+
+	//To store the results
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R1, NULL, MorseComplexDouble, dts, dts, dts * dts, (L+1), (2*L-1), 0, 0, (L+1), (2*L-1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R2, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L-1), (2*L-1), 0, 0, (2*L-1), (2*L-1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R3, NULL, MorseComplexDouble, dts, dts, dts * dts, (L-1), (2*L-1), 0, 0, (L-1), (2*L-1), p_grid, q_grid);
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R4, NULL, MorseComplexDouble, dts, dts, dts * dts, (2*L-1), (2*L-1), 0, 0, (2*L-1), (2*L-1), p_grid, q_grid);
+	for(int i=0;i<2*L-1;i++)
+	{
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R5[i], NULL , MorseComplexDouble, dts, dts, dts * dts,  (2*L-1), 1, 0, 0, (2*L-1), 1, p_grid, q_grid);
+	}
+
+	for(int i=0;i<2*L-1;i++)
+	{
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R6[i], NULL , MorseComplexDouble, dts, dts, dts * dts,  L, 1, 0, 0, L, 1, p_grid, q_grid);
+	}
+
+	EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&R7, NULL , MorseComplexDouble, dts, dts, dts * dts,  L^2, 1, 0, 0, L^2, 1, p_grid, q_grid);
+
+}
+
+
+
+
+/*
+   void phase_2_calcs(MLE_data  *data)
+   {
+
+   for(int i=0;i<T;i++)
+   {
+   MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, Fgt[i], Ep, 0.0, R1); // depend on T  --- (L+1) * (2L) X (2L) * (2L-1)
+
+   MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, Et1, R1, 0.0, R2);    // depend on T  --- (2*L-1) * (L+1) X (L+1) * (2*L-1)
+
+   MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, P, R1, 0.0, R3);	// depend on T  --- (L-1) * (L+1) X L+1 * (2*L-1)
+
+   MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, Et2, R3, 0.0, R4);	// depend on T	 --- (2*L-1) * (L-1) X  (L-1) * (2*L-1)
+
+// TODO: R5 should be computed as a matrix then used as an array of vector
+MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, R4, D, 1.0, R2);  	  //depend on T  --- R4*D + R2 (2*L-1) * (2*L-1) X (2*L-1) * (2*L-1) + (2*L-1) * (2*L-1)
+
+
+//*************************************************
+for(int m=0; m < L-1; m++)
+for(int ell=m ; ell < L-1; L++)
+{
+if( m % 2 ==0) //even
+{
+MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, Ie, R2[L+m-1], 0.0, R6[L+m-1]);
+int s_index = 0.5*(ell^2+ell)+m;
+int flm_index =  ell^2+ell+m;
+MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, R6[L+m-1], S[s_index], 0.0, flm[flm_index]); // flm[ell^2+ell+m] is a scalar
+}
+else
+{
+MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, Io, R2[L+m-1], 0.0, R6[L+m-1]);
+int s_index = 0.5*(ell^2+ell)+m;
+int flm_index =  ell^2+ell+m;
+MORSE_dgemm_Tile(MorseNoTrans, MorseNoTrans, 1.0, R6[L+m-1], S[s_index], 0.0, flm[flm_index]); // flm[ell^2+ell+m] is a scalar
+}					
+
+
+}
+
+//flm is a complex vector --- this step to convert it to real
+for(int m=0; m < L-1; m++)
+for(int ell=m ; ell < L-1; L++)
+{
+int flm_index =  ell^2+ell+m;
+flm_real[ell^2+ell+m] = creal(flm[ell^2+ell+m]);
+flm_real[ell^2+ell-m] = cimag(flm[ell^2+ell+m]);				
+}
+
+//Covariance matrix of L^2 X L^2 ---> is flm_real ^T  where flm_real is L^2XT
+//Storage requirement  
+
+}
+}
+*/

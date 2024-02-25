@@ -179,30 +179,37 @@ void core_dcmg_mean_trend (double *A, int m, int n,
 			    A[i + j * m] = 1; 			
 		    else  if( j0==1 /* I am at the second local col*/)
 		    {
-			    A[i + j * m] = forcing[((i0+1)/T)+190];
+			    A[i + j * m] = forcing[(i0/T)+190];
+//			fprintf(stderr, "\n%0.16f\n", A[i + j * m]);
+//			exit(0);
 		    }
 		    else if(j0==2)
 		    {
-			    ty = (i0+1)/T;
+			    ty = (i0)/T;
 
 			    for(int k=0;k<ty+190;k++){
-				    for(int kk=k;kk<ty+190;kk++)
+				    for(int kk=k;kk<ty+189;kk++)
 					    theta_pow *= localtheta_T_M_forcing[0];
 				   // fprintf(stderr, "%f\n", theta_pow);
 				    sum+=theta_pow*forcing[k];
 				    theta_pow = 1;
 			    }
 			    A[i + j * m] =(1-localtheta_T_M_forcing[0])*sum;
+//			    fprintf(stderr, "A[i + j * m]: %f, sum: %f, forcing: %f\n", A[i + j * m], sum, localtheta_T_M_forcing[0]);
+//					    exit(0);
 			    sum = 0;
 			    theta_pow = 1;			    
 		    }
 		    else
 		    {
 			    if(j%2==0)
-				    A[i + j * m]=sin(2.0 * PI * (i_x) * ((j0-3)/2+1) / (24.0*365.0));
+				    A[i + j * m]=sin(2.0 * PI * (i_x) * ((j0-3.0)/2.0+1.0) / (T));
 			    else
-				    A[i + j * m]=cos(2.0 * PI * (i_x) * ((j0-3)/2+1) / (24.0*365.0));
+				    A[i + j * m]=cos(2.0 * PI * (i_x) * ((j0-3.0)/2.0+1.0) / (T));
 		    }
+
+//		A[i + j * m]=uniform_distribution(-0.4, 0.4);
+
 		    j0++;
 	    }
 	    i0++;

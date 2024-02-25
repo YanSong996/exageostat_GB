@@ -24,8 +24,8 @@ int main(int argc, char **argv) {
 
 	//Values for the mean tren removal
 	int M=6;
-	int T=24*365;  //Fixed
-	int no_years= 751;
+	int T=24*366;  //Fixed
+	int no_years=1;// 751;
 	//************************************
 
 
@@ -88,8 +88,8 @@ int main(int argc, char **argv) {
 	double * forcing = (double *) malloc(751 * sizeof(double));
 	//Remove it produce Seg fault!!!!
 	int* t2m =(double *) malloc(1 * sizeof(int));
-	forcing = readObsFile("/home/songy0a/GB24/exageostat-starpu-gpu/examples/forcing.csv", 751);
-	fprintf(stderr, "focring: %f %f\n", forcing[0], forcing[1]);
+	forcing = readObsFile("/home/songy0a/GB24/exageostat-starpu-gpu/examples/forcing_new.csv", 751);
+	fprintf(stderr, "focring: %0.16f %e\n", forcing[0], forcing[1]);
 	data.forcing=forcing;
 	        fprintf(stderr, "data.focring: %f %f\n", data.forcing[0], data.forcing[1]);
 	//********************************* Read form the NetCDF file
@@ -98,7 +98,42 @@ int main(int argc, char **argv) {
 	int  lon_varid, lat_varid, time_varid,t2m_varid;
 	size_t lat_len, lon_len, time_len;
 	int 	len;
-	int ncid            = openFileNC(&data, "/home/songy0a/GB24/exageostat-starpu-gpu/examples/data_1940.nc");
+	int ncid;
+
+        //to be remove
+        int v= 8784*no_years;
+        double* t2m_temp = (double *) malloc(v *  sizeof(double));
+        N =v;// N =time_len;
+        data.M= M;
+        data.T=T;
+        data.no_years=no_years;
+        t2m = (short int *) malloc(v *  sizeof(int));
+        //*****************************
+        //
+        exageostat_init(&ncores, &gpus, &dts, &lts);
+        // Optimizater initialization
+        //NLOPT_LN_BOBYQA
+        opt=nlopt_create(NLOPT_LN_BOBYQA, num_params);
+        init_optimizer(&opt, lb, up, pow(10, -1.0 * data.opt_tol));
+        nlopt_set_maxeval(opt, data.opt_max_iters);
+        fprintf(stderr, "data.forcing: %f %f\n", data.forcing[0], data.forcing[1]);
+        data.mean_trend = 1;
+        if(strcmp (data.computation, "exact") == 0)
+                MORSE_dmle_Call(&data, ncores, gpus, dts, p_grid, q_grid, N,  0, 0);
+
+        print_summary(test, N, ncores, gpus, dts, lts,  data.computation, zvecs, p_grid, q_grid, data.precision);
+
+	char numStr[20];
+	char path[150] = "/home/songy0a/GB24/exageostat-starpu-gpu/examples/data_";
+
+	int y=1940;	
+	// Convert integer to string
+	sprintf(numStr, "%d", y);
+	strcat(path , numStr);
+	strcat(path, ".nc");
+	ncid 	= openFileNC(&data, path);
+	fprintf(stderr, "%s\n", path);
+
 	//nZmiss          = countlinesNC(ncid, dim1, dim2);
 	if ((retval = nc_inq_dimid(ncid,"longitude",&lon_varid)))
 		printf("Error: %s\n", nc_strerror(retval));
@@ -122,68 +157,81 @@ int main(int argc, char **argv) {
 		printf("Error: %s\n", nc_strerror(retval));
 	//fprintf(stderr, "=====t2m_varid=%d, \n", t2m_varid);
 	//
-	data.M= M;
-	data.T=T;
-	data.no_years=no_years;
-	t2m = (short int *) malloc(time_len *  sizeof(int));
 
 
-	//to be remove
-	int v= 8784;
-	double* t2m_temp = (double *) malloc(v *  sizeof(double));
-	N =v;// N =time_len;
-	//*****************************
-	//
-	exageostat_init(&ncores, &gpus, &dts, &lts);
-	// Optimizater initialization
-	//NLOPT_LN_BOBYQA
-	opt=nlopt_create(NLOPT_LN_BOBYQA, num_params);
-	init_optimizer(&opt, lb, up, pow(10, -1.0 * data.opt_tol));
-	nlopt_set_maxeval(opt, data.opt_max_iters);
-	fprintf(stderr, "data.forcing: %f %f\n", data.forcing[0], data.forcing[1]);
-	data.mean_trend = 1;
-	if(strcmp (data.computation, "exact") == 0)
-		MORSE_dmle_Call(&data, ncores, gpus, dts, p_grid, q_grid, N,  0, 0);
-
-	print_summary(test, N, ncores, gpus, dts, lts,  data.computation, zvecs, p_grid, q_grid, data.precision);
 	for (int l=0;l<1440; l++)
 		for (int u=0;u<721; u++)
 		{
-			if( l==440  && u ==186)
+			if( l==439  && u ==185)
 			{
-				fprintf(stderr, "================================ \n", l, u);			
-				fprintf(stderr, "longitude: %d latitude: %d \n", l, u); 
-				size_t index[] = {0, u, l};
-				size_t count[] = {time_len, 1, 1};
-				if (retval = nc_get_vara_int(ncid, t2m_varid, index, count, t2m))
-					printf("Error: %s\n", nc_strerror(retval));	
-				double  scaling_var, offset_var;
-				if (retval =nc_get_att_double(ncid, t2m_varid, "scale_factor", &scaling_var))
-					printf("Error: %s\n", nc_strerror(retval));
-
-				if (retval =nc_get_att_double(ncid, t2m_varid, "add_offset", &offset_var))
-					printf("Error: %s\n", nc_strerror(retval));
-
-				//fprintf(stderr, "scaling_var: %e -- offset_var: %e\n", scaling_var, offset_var);
-
-				//to be removed
-				for(int k=0;k<v;k++)
+				fprintf(stderr, "================================ \n", l, u);
+				fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+				int r=0;
+				for(y=1940;y<1941;y++)
 				{
-					t2m_temp[k]= ((double)t2m[k]*scaling_var) + offset_var - 273.15;
-					//	fprintf(stderr, "\nt2m_temp[k]: %d, %f\n", t2m[k], t2m_temp[k]);
-					//	exit(0);
-					//	t2m_temp[k]= t2m_temp[k] * 0.00203215878891646
+					y=1940;
+					// Convert integer to string
+					char path2[150] = "/home/songy0a/GB24/exageostat-starpu-gpu/examples/data_";
+					sprintf(numStr, "%d", y);
+					strcat(path2 , numStr);
+					strcat(path2, ".nc");
+					ncid    = openFileNC(&data, path2);
+					fprintf(stderr, "%s\n", path2);
+
+
+					fprintf(stderr, "================================ \n", l, u);
+					fprintf(stderr, "longitude: %d latitude: %d \n", l, u); 
+					size_t index[] = {0, u, l};
+					size_t count[] = {time_len, 1, 1};
+					if (retval = nc_get_vara_int(ncid, t2m_varid, index, count, t2m))
+						printf("Error: %s\n", nc_strerror(retval));	
+					double  scaling_var, offset_var;
+					if (retval =nc_get_att_double(ncid, t2m_varid, "scale_factor", &scaling_var))
+						printf("Error: %s\n", nc_strerror(retval));
+
+					if (retval =nc_get_att_double(ncid, t2m_varid, "add_offset", &offset_var))
+						printf("Error: %s\n", nc_strerror(retval));
+
+					//fprintf(stderr, "scaling_var: %e -- offset_var: %e\n", scaling_var, offset_var);
+
+					//to be removed
+					for(int k=0;k<v/no_years;k++)
+					{
+						t2m_temp[r++]= ((double)t2m[k]*scaling_var) + offset_var - 273.15;
+						//	fprintf(stderr, "\nt2m_temp[k]: %d, %f\n", t2m[k], t2m_temp[k]);
+						//	exit(0);
+						//	t2m_temp[k]= t2m_temp[k] * 0.00203215878891646
+					}
+					//*****************************
+					//    for(int i=0;i<5;i++)
+					//  fprintf(stderr, "%f\n", t2m_temp[i]);
+					// exit(0);
+
+					MORSE_MLE_dzcpy(&data, t2m_temp);
+
+					START_TIMING(data.total_exec_time);
+					nlopt_set_max_objective(opt, MLE_alg, (void *)&data);
+					nlopt_optimize(opt, starting_theta, &opt_f);
+					STOP_TIMING(data.total_exec_time);
+					fprintf(stderr, "final theta: %f\n", starting_theta[0]);
 				}
-				//*****************************
+			}
 
-				MORSE_MLE_dzcpy(&data, t2m_temp);
+		}
+	//Phase(2)
+	int L = 720;
+	if(strcmp (data.computation, "exact") == 0)
+		MORSE_dmle_Call_phase_2(&data, ncores, gpus, dts, p_grid, q_grid, N,  L);
 
-				START_TIMING(data.total_exec_time);
-				nlopt_set_max_objective(opt, MLE_alg, (void *)&data);
-				nlopt_optimize(opt, starting_theta, &opt_f);
-				STOP_TIMING(data.total_exec_time);
-				fprintf(stderr, "final theta: %f\n", starting_theta[0]);
-			}	}
+	//	read_csv_files();
+	//
+	//	phase_2_calcs();
+
+
+
+
+
+
 	MORSE_Finalize();
 	return 0;
 }
