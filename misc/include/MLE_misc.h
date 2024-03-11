@@ -341,6 +341,7 @@ typedef struct
     int M;
     void *X;
     void *part2_vector;
+    void *estimated_mean_trend;
     void *XtX;
     double *forcing;    
     int T;

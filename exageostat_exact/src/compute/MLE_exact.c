@@ -19,7 +19,6 @@
  **/
 #include "../include/MLE_exact.h"
 #include <complex.h>
-
 //***************************************************************************************
 void MORSE_MLE_dzvg_Tile (MLE_data *data,  double * Nrand, double * initial_theta, int n, int dts, int log)
     //! Generate Observations Vector (Z) for testing Maximum
@@ -349,9 +348,9 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 
 
 
-    fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
-    double *C = (double *) malloc(N *15 *sizeof(double));
-   MORSE_Tile_to_Lapack( X, C, N);
+  //  fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
+  //  double *C = (double *) malloc(N *15 *sizeof(double));
+ //  MORSE_Tile_to_Lapack( X, C, N);
 
   // double sum =0.0;
   // int count =0;
@@ -368,15 +367,15 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    fprintf(stderr, "\nsum(X): %0.16f --- %d --- %0.16f\n", sum, count, (0.3235500048246540*count));
    exit(0);
 */
-  //  print_dmatrix("testC", N, 15, C, N);
-//   exit(0);
+//   print_dmatrix("testC", N, 15, C, N);
+//  exit(0);
    //***********************************
 
    //calculate part1
    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
 
-   //    fprintf(stderr, "data->part1: %f\n", data->part1);
-   //   exit(0); 
+  //     fprintf(stderr, "data->part1: %f\n", data->part1);
+  //    exit(0); 
    //exit(0);
    //          double *z = (double *) malloc(N * sizeof(double));
    //         MORSE_Tile_to_Lapack( Zobs, z, N);
@@ -392,15 +391,15 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
 
 
-    double *z = (double *) malloc(N * sizeof(double));
-    MORSE_Tile_to_Lapack( part2_vector, z, N);
-    double sum=0;
-   for(int i=0;i<15;i++)
-    {	sum+= z[i];
-   	   fprintf(stderr, "\n%f", z[i]);
-    }
-    fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);   
-    //exit(0);
+  // double *z = (double *) malloc(N * sizeof(double));
+  // MORSE_Tile_to_Lapack( part2_vector, z, N);
+  // double sum=0;
+  // for(int i=0;i<15;i++)
+  // {	sum+= z[i];
+//	   fprintf(stderr, "\n%f", z[i]);
+ //  }
+//   fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);   
+//   exit(0);
 
 
    //double *z = (double *) malloc(15 * sizeof(double));
@@ -410,18 +409,24 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    //exit(0);
 
 
-    MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
+   MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
 
 
 
-   double *XTX = (double *) malloc(15 * 15 *sizeof(double));
-   MORSE_Tile_to_Lapack( XtX, XTX, 15);
+   //double *XTX = (double *) malloc(15 * 15 *sizeof(double));
+  // MORSE_Tile_to_Lapack( XtX, XTX, 15);
 
-   print_dmatrix("testC", 15, 15, XTX, 15);
-
+//   print_dmatrix("testC", 15, 15, XTX, 15);
+//exit(0);
 
    int error = MORSE_dpotrf_Tile(MorseLower,XtX);
-   fprintf(stderr, "\n Cholesky is Okay %d\n", error);
+   if(error == 0)
+	   fprintf(stderr, "\nCholesky is Okay...\n");
+   else
+   {
+	   fprintf(stderr, "\nCholesky is not Okay\n");
+	   exit(0);
+   }
    //   MORSE_dtrtri_Tile(MorseLower,MorseNonUnit,XtX);
 
 
@@ -435,14 +440,14 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 	 xtx_as_vec[i+15*j]=0;
 	 */
 
-  // MORSE_dlaset_Tile(MorseUpper, 0, 0, XtX);
-   double *L = (double *) malloc(15 * 15 *sizeof(double));
-   MORSE_Tile_to_Lapack( XtX, L, 15);
+   // MORSE_dlaset_Tile(MorseUpper, 0, 0, XtX);
+   // double *L = (double *) malloc(15 * 15 *sizeof(double));
+   //  MORSE_Tile_to_Lapack( XtX, L, 15);
 
-//Okay
-   print_dmatrix("testC", 15, 15, L, 15);
-//    MORSE_dlaset_Tile(MorseUpperLower, 0, 0, data->descC);
-exit(0);
+   //Okay
+   // print_dmatrix("testC", 15, 15, L, 15);
+   //    MORSE_dlaset_Tile(MorseUpperLower, 0, 0, data->descC);
+   //exit(0);
 
 
    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
@@ -461,26 +466,179 @@ exit(0);
    //   }
    // fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);
    //
-   
-      z = (double *) malloc(15 * sizeof(double));
-      MORSE_Tile_to_Lapack( part2_vector, z, 15);
-       sum=0;
-      for(int i=0;i<15;i++)
-      { 
-      sum+= z[i];
-      fprintf(stderr, "\n%.12f", z[i]);
-      }
-      fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);
-   
+
+   //  z = (double *) malloc(15 * sizeof(double));
+   // MORSE_Tile_to_Lapack( part2_vector, z, 15);
+   // sum=0;
+   // for(int i=0;i<15;i++)
+   // { 
+   //	   sum+= z[i];
+   //	   fprintf(stderr, "\n%.12f", z[i]);
+   //  }
+   //   fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);
+   //exit(0);
    //    gsl_blas_dgemv(CblasNoTrans,1.0,XtX,part2_vector,0.0,part2_vector);
    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
 
-   fprintf(stderr, "\ndata->part2: %e\n", data->part2);
+   //  fprintf(stderr, "\ndata->part1: %e\n", data->part1);
+   //   fprintf(stderr, "\ndata->part2: %e\n", data->part2);
    value=(-1.0)*log(data->part1-data->part2);
-   fprintf(stderr, "%f %f\n", value, theta[0]);
-   exit(0);
+     data->iter_count++;
+   fprintf(stderr, "%d- data->part1:%f, data->part2: %f,  theta[0]:%0.14f ------- lh: %0.18f\n",   data->iter_count, data->part1, data->part2, theta[0], value);
+   //exit(0);
+  free(localtheta);
    return value;
 }
+
+
+
+void mean_trend(double * theta, void * MORSE_data, int loc)
+//! Maximum Loglikelihood Evaluation (MLE)
+/*!  -- using exact or approximation computation, and (single, double, or mixed) precision.
+ * Returns the loglikelihhod value for the given theta.
+ * @param[in] n: unsigned variable used by NLOPT package.
+ * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
+ *                           that is used to to generate the Covariance Matrix.
+ * @param[in] grad: double variable used by NLOPT package.
+ * @param[in] data: MLE_data struct with different MLE inputs.
+ */
+{
+
+    //Initialization
+    double value;
+    MLE_data* data      = ((MLE_data*)MORSE_data);
+    int M = data->M;                     // M is a int determined by us, which could be e.g. 5 for hourly data.
+    int T = data->T;
+    double *forcing=data->forcing;  // ? forcing is a vector loaded from a .csv file, in data (obs_dir)
+    int no_years=data->no_years;
+
+    MORSE_desc_t *Zobs=data->descZ;     // ? Zobs is the time series at certain grid, should be in data
+    MORSE_desc_t *X=data->X;        // X is a matrix generated in this process
+    MORSE_desc_t *part1=data->descpart1;  // a vector generated in this process
+    MORSE_desc_t *part2=data->descpart2;  // a vector generated in this process
+    MORSE_desc_t *part2_vector=data->part2_vector;  // a vector generated in this process
+    MORSE_desc_t *estimated_mean_trend= data->estimated_mean_trend;  // a vector generated in this process
+    MORSE_sequence_t *msequence      = (MORSE_sequence_t *) data->sequence;
+    MORSE_request_t  *mrequest       = (MORSE_request_t *) data->request;
+    int         N       = X->m;
+    MORSE_desc_t *XtX=data->XtX;
+
+    //generate the matrix
+    double* localtheta =  (double *) malloc((3+no_years) * sizeof(double));
+    localtheta[0]= theta[0];
+    localtheta[1]= T;
+    localtheta[2]= M;
+    fprintf(stderr, "Theta: %f\n", theta[0]);
+    for(int ii=0;ii<no_years;ii++)
+	    localtheta[3+ii]=forcing[ii];
+
+
+    MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, X, NULL,
+		    NULL, NULL, localtheta,
+		    data->dm, "trend_model",  msequence, mrequest);
+
+
+    //   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
+
+    //Calculate part2
+    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
+
+//    double *z = (double *) malloc(15 * sizeof(double));
+ //   MORSE_Tile_to_Lapack( part2_vector, z, 15);
+ //   print_dmatrix("testC", 15, 1, z, 1);
+  //  exit(0);
+
+    MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
+
+    int error = MORSE_dpotrf_Tile(MorseLower,XtX);
+    if(error == 0)
+	    fprintf(stderr, "\nCholesky is Okay...\n");
+    else
+    {
+	    fprintf(stderr, "\nCholesky is not Okay\n");
+	    exit(0);
+    }
+
+    //  MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
+
+    //   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
+    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
+    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseTrans, MorseNonUnit, 1, XtX, part2_vector);
+
+    MORSE_dgemm_Tile(MorseNoTrans,MorseNoTrans,1.0, X, part2_vector,0.0, estimated_mean_trend);
+    MORSE_dgeadd_Tile(MorseNoTrans, 1, Zobs  , -1, estimated_mean_trend);
+
+    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0, estimated_mean_trend, estimated_mean_trend, 0.0, part2);
+    data->part2 = data->part2/N;   //SIGMA^2
+
+
+//    double *z = (double *) malloc(15 * sizeof(double));
+ //   MORSE_Tile_to_Lapack( part2_vector, z, 15);
+ //   print_dmatrix("testC", 15, 1, z, 1);
+
+    fprintf(stderr,  "data->part2: %f\n", data->part2); 
+
+    double *estimated_mean_trend_lapack = (double *) malloc(N * sizeof(double));
+    MORSE_Tile_to_Lapack( estimated_mean_trend, estimated_mean_trend_lapack, N);
+
+    double sum =0;
+    for(int i=0;i<N;i++)
+    {
+	    estimated_mean_trend_lapack[i] /= sqrt(data->part2); //Z
+	   // sum += estimated_mean_trend_lapack[i];
+    }
+
+    //fprintf(stderr, "sum_estimated_mean_trend: %e\n", sum);
+  //  exit(0);
+  //  exit(0);
+    double *part2_vector_lapack = (double *) malloc((3+(2*M)) * sizeof(double));
+    MORSE_Tile_to_Lapack( part2_vector, part2_vector_lapack, 3+(2*M));
+
+ //   for(int i=0;i<3+(2*M);i++)
+   // {
+//	    sum+=part2_vector_lapack[i];
+           // sum += estimated_mean_trend_lapack[i];
+  //  }
+  //
+ 
+  //Create New directory if not exist
+    struct stat st = {0};
+    if (stat("./stage0_outputs", &st) == -1)
+	    mkdir("./stage0_outputs", 0700);
+
+    char * nFileZ  = (char *) malloc(50 * sizeof(char));
+    snprintf(nFileZ, 50, "%s%d%s", "./stage0_outputs/", loc,".csv");
+    fprintf(stderr, "write to: %s\n", nFileZ);
+    FILE* fp = fopen(nFileZ, "w");
+    if(fp == NULL){
+	    fprintf(stderr, "File %s cannot be opened to write\n", nFileZ);
+	    exit(1);
+    }
+
+    fprintf(fp, "%f\n", theta[0]);
+    fprintf(fp, "%f\n", data->part2);  // Sigma^2    
+    for(int i = 0; i < 3+(2*M); i++){
+	    fprintf(fp, "%f\n", part2_vector_lapack[i]);
+    }
+
+    for(int i = 0; i < N; i++){
+	    fprintf(fp, "%f\n", estimated_mean_trend_lapack[i]);
+    }
+    fclose(fp);
+    //free(nFileZ);
+
+    //fprintf(stderr, "sum_part2_vector: %e\n", sum);
+
+    //    // MORSE_Tile_to_Lapack( part2_vector, z, 15);
+    //       // MORSE_Tile_to_Lapack( part2_vector, z, 15);
+
+
+    //   value=(-1.0)*log(data->part1-data->part2);
+    //  fprintf(stderr, "data->part1:%f, data->part2: %f,  theta[0]:%0.14f ------- lh: %0.14f\n", data->part1, data->part2, theta[0], value);
+
+    //  return value;
+}
+
 
 
 double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * MORSE_data) {
@@ -2585,6 +2743,7 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 	MORSE_desc_t *MORSE_descdet	 = NULL;
 	MORSE_desc_t *X  		 = NULL;
 	MORSE_desc_t *part2_vector       = NULL;
+	MORSE_desc_t *estimated_mean_trend   = NULL;
 	MORSE_desc_t *XtX                = NULL;
 	MORSE_desc_t *MORSE_descpart1    = NULL;
 	MORSE_desc_t *MORSE_descpart2    = NULL;
@@ -2657,6 +2816,7 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descpart1, &data->part1, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
 		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&MORSE_descpart2, &data->part2, MorseRealDouble, dts, dts, dts * dts, 1, 1, 0, 0, 1, 1, p_grid, q_grid);
 
+		EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&estimated_mean_trend, NULL, MorseRealDouble, dts,dts,dts*dts, N,1,0,0,N,1,p_grid,q_grid);
 
 		//EXAGEOSTAT_ALLOCATE_MATRIX_TILE(&forcing, NULL, MorseRealDouble, dts,dts,dts*dts,751,1,0,0,751,1,p_grid,q_grid);
 	}
@@ -2666,7 +2826,7 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 	//
 	//
 	data->descpart1		= MORSE_descpart1;
-	data->descpart2         = MORSE_descpart1;
+	data->descpart2         = MORSE_descpart2;
 	data->descC		= MORSE_descC;
 	data->descsubC11        = MORSE_descsubC11;
 	data->descsubC12        = MORSE_descsubC12;
@@ -2683,6 +2843,7 @@ void MORSE_dmle_Call(MLE_data  *data, int ncores,int gpus, int dts, int p_grid, 
 
 	data->X                 = X;	
 	data->part2_vector      = part2_vector;
+	data->estimated_mean_trend      = estimated_mean_trend;
 	data->XtX               = XtX;
 
 	//data->descZmiss		= MORSE_descZmiss;

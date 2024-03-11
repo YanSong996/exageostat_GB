@@ -171,8 +171,9 @@ void core_dcmg_mean_trend (double *A, int m, int n,
     int ty;
     double theta_pow=1.0;
     double sum=0.0;
-
-    for (i = 0; i < m; i++) {
+//fprintf(stderr, "\n:================ %d %d %d\n", i0, m, n);
+//exit(0);
+for (i = 0; i < m; i++) {
 	    j0 = n0;
 	    for (j = 0; j < n; j++) {
 		    if( j0==0 /* I am at the first local col*/)
@@ -203,7 +204,11 @@ void core_dcmg_mean_trend (double *A, int m, int n,
 		    else
 		    {
 			    if(j%2==0)
-				    A[i + j * m]=sin(2.0 * PI * (i_x) * ((j0-3.0)/2.0+1.0) / (T));
+			    {
+				    A[i + j * m]=sin(2.0 * PI * (i_x) * (floor((j0-3.0)/2.0)+1.0) / (T));
+//				    fprintf(stderr, "\n===PI: %f, i_x:%f, j0: %d, T:%d, value: %f, expr: %f\n", PI, i_x, j0, T, A[i + j * m], (2.0 * PI * (i_x) * ((j0-3.0)/2.0+1.0)));
+//				    exit(0);
+			    }
 			    else
 				    A[i + j * m]=cos(2.0 * PI * (i_x) * ((j0-3.0)/2.0+1.0) / (T));
 		    }
