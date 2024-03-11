@@ -112,7 +112,7 @@ int main(int argc, char **argv) {
 	exageostat_init(&ncores, &gpus, &dts, &lts);
 	// Optimizater initialization
 	//NLOPT_LN_BOBYQA
-	opt=nlopt_create(25, num_params);
+	opt=nlopt_create(NLOPT_LN_BOBYQA, num_params);
 	init_optimizer(&opt, lb, up, pow(10, -1.0 * data.opt_tol));
 	nlopt_set_maxeval(opt, data.opt_max_iters);
 	fprintf(stderr, "data.forcing: %f %f\n", data.forcing[0], data.forcing[1]);
@@ -158,8 +158,8 @@ int main(int argc, char **argv) {
 		for (int u=0;u<721; u++)
 		{
 			size_t index[] = {0, u, l};
-			//		if( l==439  && u ==185)
-			if( true)
+			if( l==439  && u ==185)
+				//if( true)
 			{
 				int r=0;
 				int  ll = 0;
@@ -236,7 +236,7 @@ int main(int argc, char **argv) {
 				fprintf(stderr, "99999999999longitude: %d latitude: %d \n", l, u);
 				START_TIMING(data.total_exec_time);
 				nlopt_set_max_objective(opt, MLE_alg, (void *)&data);
-				starting_theta[0] = 0.99;
+				//starting_theta[0] = 0.99;
 				nlopt_optimize(opt, starting_theta, &opt_f);
 				STOP_TIMING(data.total_exec_time);
 				//	starting_theta[0] = 0.272049;
@@ -244,6 +244,7 @@ int main(int argc, char **argv) {
 
 				mean_trend(starting_theta, &data, location);
 				location++;
+				//exit(0);
 			}
 			fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 		}
