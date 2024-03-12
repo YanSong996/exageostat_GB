@@ -88,7 +88,7 @@ int main(int argc, char **argv) {
 	double * forcing = (double *) malloc(751 * sizeof(double));
 	//Remove it produce Seg fault!!!!
 	int* t2m =(double *) malloc(1 * sizeof(int));
-	forcing = readObsFile("/home/songy0a/GB24/exageostat-starpu-gpu/examples/forcing_new.csv", 751);
+	forcing = readObsFile("/scratch/abdullsm/GB24_stage0/exageostat_GB/forcing_new.csv", 751);
 	fprintf(stderr, "focring: %0.16f %e\n", forcing[0], forcing[1]);
 	data.forcing=forcing;
 	fprintf(stderr, "data.focring: %f %f\n", data.forcing[0], data.forcing[1]);
@@ -102,7 +102,7 @@ int main(int argc, char **argv) {
 
 	//to be remove
 	int v= 8760;//*no_years;
-	N =8760 *11;// N =time_len;
+	N =8760 *61;// N =time_len;
 	data.M= M;
 	data.T=T;
 	data.no_years=no_years;
@@ -123,7 +123,7 @@ int main(int argc, char **argv) {
 	print_summary(test, N, ncores, gpus, dts, lts,  data.computation, zvecs, p_grid, q_grid, data.precision);
 
 	char numStr[20];
-	char path[150] = "/home/songy0a/GB24/exageostat-starpu-gpu/examples/data_1941.nc";
+	char path[150] = "/scratch/abdullsm/ERA_data/data_1941.nc";
 
 	ncid 	= openFileNC(&data, path);
 	fprintf(stderr, "%s\n", path);
@@ -153,23 +153,23 @@ int main(int argc, char **argv) {
 	//
 
 	int location = 0;
-	double* t2m_temp = (double *) malloc(v * (1951-1940) *  sizeof(double));
+	double* t2m_temp = (double *) malloc(v * (2000-1940) *  sizeof(double));
 	for (int l=0;l<1440; l++)
 		for (int u=0;u<721; u++)
 		{
 			size_t index[] = {0, u, l};
-			if( l==439  && u ==185)
-				//if( true)
+				if( l==439  && u ==185)
+		//	if( true)
 			{
 				int r=0;
 				int  ll = 0;
 				double sum_obs=0;
 				double  scaling_var, offset_var;
-				for(int y=1940;y<1951;y++)
+				for(int y=1940;y<2000;y++)
 				{
 					fprintf(stderr, "================================ \n");
 					// Convert integer to string
-					char path2[150] = "/home/songy0a/GB24/exageostat-starpu-gpu/examples/data_";
+					char path2[150] = "/scratch/abdullsm/ERA_data/data_";
 					sprintf(numStr, "%d", y);
 					strcat(path2 , numStr);
 					strcat(path2, ".nc");
@@ -183,19 +183,19 @@ int main(int argc, char **argv) {
 					{	t2m = (short int *) malloc(v *  sizeof(int));
 						time_len=v;
 					}
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u); 
+					//		fprintf(stderr, "longitude: %d latitude: %d \n", l, u); 
 					size_t count[] = {time_len, 1, 1};
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+					//		fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 					if (retval = nc_get_vara_int(ncid, t2m_varid, index, count, t2m))
 						printf("Error: %s\n", nc_strerror(retval));	
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+					//		fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 					if (retval =nc_get_att_double(ncid, t2m_varid, "scale_factor", &scaling_var))
 						printf("Error: %s\n", nc_strerror(retval));
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+					//		fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 					if (retval =nc_get_att_double(ncid, t2m_varid, "add_offset", &offset_var))
 						printf("Error: %s\n", nc_strerror(retval));
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
-					fprintf(stderr, "scaling_var: %e -- offset_var: %e\n", scaling_var, offset_var);
+					//		fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+					//		fprintf(stderr, "scaling_var: %e -- offset_var: %e\n", scaling_var, offset_var);
 
 					//to be removed
 					// 8784
@@ -231,12 +231,12 @@ int main(int argc, char **argv) {
 					// exit(0);
 					closeFileNC(&data, ncid);//	free (path2);
 				}
-				fprintf(stderr, "888888888longitude: %d latitude: %d \n", l, u);
+				//	fprintf(stderr, "888888888longitude: %d latitude: %d \n", l, u);
 				MORSE_MLE_dzcpy(&data, t2m_temp);
-				fprintf(stderr, "99999999999longitude: %d latitude: %d \n", l, u);
+				//	fprintf(stderr, "99999999999longitude: %d latitude: %d \n", l, u);
 				START_TIMING(data.total_exec_time);
 				nlopt_set_max_objective(opt, MLE_alg, (void *)&data);
-				//starting_theta[0] = 0.99;
+				starting_theta[0] = 0.9;
 				nlopt_optimize(opt, starting_theta, &opt_f);
 				STOP_TIMING(data.total_exec_time);
 				//	starting_theta[0] = 0.272049;
@@ -244,9 +244,9 @@ int main(int argc, char **argv) {
 
 				mean_trend(starting_theta, &data, location);
 				location++;
-				//exit(0);
+				exit(0);
 			}
-			fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+			//fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 		}
 
 	//Phase(2)

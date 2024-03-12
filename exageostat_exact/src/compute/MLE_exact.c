@@ -1065,7 +1065,7 @@ double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * M
 		//fprintf(stderr," ---- re-store Z Vector Time: %6.2f\n", zcpy_time);
 		printf(" ---- Total Time: %6.2f\n", /*matrix_gen_time+*/ time_facto + logdet_calculate + time_solve);
 		//fprintf(stderr," ---- Gflop (ignore): %6.2f\n", flops / 1e9 );
-		printf(" ---- Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
+		printf(" ----  MLE - Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
 		//fprintf(stderr," ---- Peak Performance: %6.2f Gflops/s\n",  (ncores*p_grid*q_grid*16*2.3) );
 		//fprintf(stderr,"***************************************************\n");
 
