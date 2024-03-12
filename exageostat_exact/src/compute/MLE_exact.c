@@ -349,8 +349,8 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 
 
   //  fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
-  //  double *C = (double *) malloc(N *15 *sizeof(double));
- //  MORSE_Tile_to_Lapack( X, C, N);
+  double *C = (double *) malloc(N *13 *sizeof(double));
+   MORSE_Tile_to_Lapack( X, C, N);
 
   // double sum =0.0;
   // int count =0;
@@ -367,8 +367,8 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    fprintf(stderr, "\nsum(X): %0.16f --- %d --- %0.16f\n", sum, count, (0.3235500048246540*count));
    exit(0);
 */
-//   print_dmatrix("testC", N, 15, C, N);
-//  exit(0);
+//   print_dmatrix("testC", N, 13, C, N);
+  //exit(0);
    //***********************************
 
    //calculate part1
@@ -391,15 +391,15 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
 
 
-  // double *z = (double *) malloc(N * sizeof(double));
-  // MORSE_Tile_to_Lapack( part2_vector, z, N);
+   double *z = (double *) malloc(N * sizeof(double));
+   MORSE_Tile_to_Lapack( Zobs, z, N);
   // double sum=0;
-  // for(int i=0;i<15;i++)
-  // {	sum+= z[i];
+//   for(int i=0;i<13;i++)
+ //  {	
 //	   fprintf(stderr, "\n%f", z[i]);
  //  }
 //   fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);   
-//   exit(0);
+  // exit(0);
 
 
    //double *z = (double *) malloc(15 * sizeof(double));
@@ -413,10 +413,10 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 
 
 
-   //double *XTX = (double *) malloc(15 * 15 *sizeof(double));
-  // MORSE_Tile_to_Lapack( XtX, XTX, 15);
+ //  double *XTX = (double *) malloc(13 * 13 *sizeof(double));
+ //  MORSE_Tile_to_Lapack( XtX, XTX, 13);
 
-//   print_dmatrix("testC", 15, 15, XTX, 15);
+//   print_dmatrix("testC", 13, 13, XTX, 13);
 //exit(0);
 
    int error = MORSE_dpotrf_Tile(MorseLower,XtX);
@@ -441,13 +441,13 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 	 */
 
    // MORSE_dlaset_Tile(MorseUpper, 0, 0, XtX);
-   // double *L = (double *) malloc(15 * 15 *sizeof(double));
-   //  MORSE_Tile_to_Lapack( XtX, L, 15);
+//    double *L = (double *) malloc(13 * 13 *sizeof(double));
+//     MORSE_Tile_to_Lapack( XtX, L, 13);
 
    //Okay
-   // print_dmatrix("testC", 15, 15, L, 15);
+//    print_dmatrix("testC", 13, 13, L, 13);
    //    MORSE_dlaset_Tile(MorseUpperLower, 0, 0, data->descC);
-   //exit(0);
+ //  exit(0);
 
 
    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);

@@ -23,8 +23,8 @@
 int main(int argc, char **argv) {
 
 	//Values for the mean trend removal
-	int M=6;
-	int T=24*365;  //Fixed
+	int M=5;
+	int T=365;  //Fixed
 	int no_years= 751;
 	//************************************
 
@@ -101,8 +101,8 @@ int main(int argc, char **argv) {
 	int ncid;
 
 	//to be remove
-	int v= 8760;//*no_years;
-	N =8760 *11;// N =time_len;
+	int v= 365;//*no_years;
+	N = 365 * 10;// N =time_len;
 	data.M= M;
 	data.T=T;
 	data.no_years=no_years;
@@ -153,7 +153,7 @@ int main(int argc, char **argv) {
 	//
 
 	int location = 0;
-	double* t2m_temp = (double *) malloc(v * (1951-1940) *  sizeof(double));
+	double* t2m_temp = (double *) malloc(v * (1951-1941) *  sizeof(double));
 	for (int l=0;l<1440; l++)
 		for (int u=0;u<721; u++)
 		{
@@ -165,7 +165,7 @@ int main(int argc, char **argv) {
 				int  ll = 0;
 				double sum_obs=0;
 				double  scaling_var, offset_var;
-				for(int y=1940;y<1951;y++)
+				for(int y=1941;y<1951;y++)
 				{
 					fprintf(stderr, "================================ \n");
 					// Convert integer to string
@@ -176,35 +176,39 @@ int main(int argc, char **argv) {
 					ncid    = openFileNC(&data, path2);
 					fprintf(stderr, "%s\n", path2);
 					if(y %4 ==0)
-					{		t2m = (short int *) malloc((v+24) *  sizeof(int));
-						time_len=v+24;
+					{	
+						t2m = (short int *) malloc((v*24+24) *  sizeof(int));
+						time_len=v*24+24;
 					}
 					else
-					{	t2m = (short int *) malloc(v *  sizeof(int));
-						time_len=v;
+					{	t2m = (short int *) malloc(v * 24 *  sizeof(int));
+						time_len=v*24;
 					}
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u); 
 					size_t count[] = {time_len, 1, 1};
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 					if (retval = nc_get_vara_int(ncid, t2m_varid, index, count, t2m))
 						printf("Error: %s\n", nc_strerror(retval));	
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 					if (retval =nc_get_att_double(ncid, t2m_varid, "scale_factor", &scaling_var))
 						printf("Error: %s\n", nc_strerror(retval));
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 					if (retval =nc_get_att_double(ncid, t2m_varid, "add_offset", &offset_var))
 						printf("Error: %s\n", nc_strerror(retval));
-					fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
-					fprintf(stderr, "scaling_var: %e -- offset_var: %e\n", scaling_var, offset_var);
-
+				//	fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+					
+					double sum_temp = 0;
 					//to be removed
 					// 8784
 					if(y%4==0)
-						for(int k=0;k<v+24;k++)
+					{
+						for(int k=0;k<v*24+24;k++)
 						{
 							if(k>= 1416 && k<=1439);
 							else
-							{	t2m_temp[ll++]= ((double)t2m[k]*scaling_var) + offset_var - 273.15;
+							{	
+								sum_temp += ((double)t2m[k]*scaling_var) + offset_var - 273.15;
+								if((k+1) % 24 == 0 )
+								{	
+									t2m_temp[ll++] = sum_temp/24.0;
+									sum_temp = 0;
+								}
 								//		sum_obs+=((double)t2m[k]*scaling_var) + offset_var - 273.15;
 							}
 							//if(k>v)
@@ -212,31 +216,41 @@ int main(int argc, char **argv) {
 							//      exit(0);
 							//      t2m_temp[k]= t2m_temp[k] * 0.00203215878891646
 						}
+					}
 					else
-
-						for(int k=0;k<v;k++)
+					{
+						//	int r=0;
+						//sum_temp = 0;
+						for(int k=0;k<v*24;k++)
 						{
-							if( ll==0)
-								fprintf(stderr, "==================>\n");
-							t2m_temp[ll++]= ((double)t2m[k]*scaling_var) + offset_var - 273.15;
-							//	fprintf(stderr, "\nt2m_temp[k]: %d, %f\n", t2m[k], t2m_temp[k]);
-							//	exit(0);
-							//	t2m_temp[k]= t2m_temp[k] * 0.00203215878891646
+							sum_temp += ((double)t2m[k]*scaling_var) + offset_var - 273.15;
+							//		fprintf(stderr, "%f\n", sum_temp);
+							//		r++;
+							//if(k==48)
+							//	{
+							//		fprintf(stderr, "sum =%f------ %d\n", sum_temp, (0%23));	
+							//		exit(0);
+							//	}
+							if((k+1) % 24 == 0 )
+							{
+								t2m_temp[ll++] = sum_temp/24.0;
+								//			fprintf(stderr, "%f\n", t2m_temp[ll++]);
+								sum_temp = 0;
+							}
 						}
+					}
 					//*****************************
 					//fprintf(stderr, "sum: ---- %f\n", sum_obs);
 					//	exit(0);
 					//    for(int i=0;i<5;i++)
 					//  fprintf(stderr, "%f\n", t2m_temp[i]);
 					// exit(0);
-					closeFileNC(&data, ncid);//	free (path2);
+					//closeFileNC(&data, ncid);//	free (path2);
 				}
-				fprintf(stderr, "888888888longitude: %d latitude: %d \n", l, u);
 				MORSE_MLE_dzcpy(&data, t2m_temp);
-				fprintf(stderr, "99999999999longitude: %d latitude: %d \n", l, u);
 				START_TIMING(data.total_exec_time);
 				nlopt_set_max_objective(opt, MLE_alg, (void *)&data);
-				//starting_theta[0] = 0.99;
+				starting_theta[0] = 0.9;
 				nlopt_optimize(opt, starting_theta, &opt_f);
 				STOP_TIMING(data.total_exec_time);
 				//	starting_theta[0] = 0.272049;
@@ -246,7 +260,7 @@ int main(int argc, char **argv) {
 				location++;
 				//exit(0);
 			}
-			fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
+			//fprintf(stderr, "longitude: %d latitude: %d \n", l, u);
 		}
 
 	//Phase(2)
