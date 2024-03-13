@@ -349,7 +349,7 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 
 
   //  fprintf(stderr, "the size of the X matrix is %d X %d", N, (3+2*M));
-  //  double *C = (double *) malloc(N *15 *sizeof(double));
+ // double *C = (double *) malloc(N *13 *sizeof(double));
  //  MORSE_Tile_to_Lapack( X, C, N);
 
   // double sum =0.0;
@@ -367,8 +367,8 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    fprintf(stderr, "\nsum(X): %0.16f --- %d --- %0.16f\n", sum, count, (0.3235500048246540*count));
    exit(0);
 */
-//   print_dmatrix("testC", N, 15, C, N);
-//  exit(0);
+//   print_dmatrix("testC", N, 13, C, N);
+  //exit(0);
    //***********************************
 
    //calculate part1
@@ -391,15 +391,15 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
 
 
-  // double *z = (double *) malloc(N * sizeof(double));
-  // MORSE_Tile_to_Lapack( part2_vector, z, N);
+//   double *z = (double *) malloc(N * sizeof(double));
+ //  MORSE_Tile_to_Lapack( Zobs, z, N);
   // double sum=0;
-  // for(int i=0;i<15;i++)
-  // {	sum+= z[i];
+//   for(int i=0;i<13;i++)
+ //  {	
 //	   fprintf(stderr, "\n%f", z[i]);
  //  }
 //   fprintf(stderr, "\nsum(part2_vector)= %f\n", sum);   
-//   exit(0);
+  // exit(0);
 
 
    //double *z = (double *) malloc(15 * sizeof(double));
@@ -413,20 +413,27 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 
 
 
-   //double *XTX = (double *) malloc(15 * 15 *sizeof(double));
-  // MORSE_Tile_to_Lapack( XtX, XTX, 15);
+ //  double *XTX = (double *) malloc(13 * 13 *sizeof(double));
+ //  MORSE_Tile_to_Lapack( XtX, XTX, 13);
 
-//   print_dmatrix("testC", 15, 15, XTX, 15);
+//   print_dmatrix("testC", 13, 13, XTX, 13);
 //exit(0);
 
    int error = MORSE_dpotrf_Tile(MorseLower,XtX);
-   if(error == 0)
-	   fprintf(stderr, "\nCholesky is Okay...\n");
-   else
+#if defined(CHAMELEON_USE_MPI)
+   if ( MORSE_My_Mpi_Rank() == 0 )
    {
-	   fprintf(stderr, "\nCholesky is not Okay\n");
-	   exit(0);
+#endif 
+	   if(error == 0)
+		   fprintf(stderr, "\nCholesky is Okay...\n");
+	   else
+	   {
+		   fprintf(stderr, "\nCholesky is not Okay\n");
+		   exit(0);
+	   }
+#if defined(CHAMELEON_USE_MPI)
    }
+#endif   
    //   MORSE_dtrtri_Tile(MorseLower,MorseNonUnit,XtX);
 
 
@@ -438,16 +445,16 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
 	 for(int j=0;j<15;j++)
 	 if(j>i)
 	 xtx_as_vec[i+15*j]=0;
-	 */
+    */
 
    // MORSE_dlaset_Tile(MorseUpper, 0, 0, XtX);
-   // double *L = (double *) malloc(15 * 15 *sizeof(double));
-   //  MORSE_Tile_to_Lapack( XtX, L, 15);
+   //    double *L = (double *) malloc(13 * 13 *sizeof(double));
+   //     MORSE_Tile_to_Lapack( XtX, L, 13);
 
    //Okay
-   // print_dmatrix("testC", 15, 15, L, 15);
+   //    print_dmatrix("testC", 13, 13, L, 13);
    //    MORSE_dlaset_Tile(MorseUpperLower, 0, 0, data->descC);
-   //exit(0);
+   //  exit(0);
 
 
    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
@@ -483,160 +490,174 @@ double MLE_alg_mean_trend(unsigned n, const double * theta, double * grad, void 
    //  fprintf(stderr, "\ndata->part1: %e\n", data->part1);
    //   fprintf(stderr, "\ndata->part2: %e\n", data->part2);
    value=(-1.0)*log(data->part1-data->part2);
-     data->iter_count++;
-   fprintf(stderr, "%d- data->part1:%f, data->part2: %f,  theta[0]:%0.14f ------- lh: %0.18f\n",   data->iter_count, data->part1, data->part2, theta[0], value);
+   data->iter_count++;
+#if defined(CHAMELEON_USE_MPI)   
+   if ( MORSE_My_Mpi_Rank() == 0 )
+   {
+#endif
+	   fprintf(stderr, "%d- data->part1:%f, data->part2: %f,  theta[0]:%0.14f ------- lh: %0.18f\n",   data->iter_count, data->part1, data->part2, theta[0], value);
+#if defined(CHAMELEON_USE_MPI)
+   }
+#endif   
    //exit(0);
-  free(localtheta);
+   free(localtheta);
    return value;
 }
 
 
 
 void mean_trend(double * theta, void * MORSE_data, int loc)
-//! Maximum Loglikelihood Evaluation (MLE)
-/*!  -- using exact or approximation computation, and (single, double, or mixed) precision.
- * Returns the loglikelihhod value for the given theta.
- * @param[in] n: unsigned variable used by NLOPT package.
- * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
- *                           that is used to to generate the Covariance Matrix.
- * @param[in] grad: double variable used by NLOPT package.
- * @param[in] data: MLE_data struct with different MLE inputs.
- */
+	//! Maximum Loglikelihood Evaluation (MLE)
+	/*!  -- using exact or approximation computation, and (single, double, or mixed) precision.
+	 * Returns the loglikelihhod value for the given theta.
+	 * @param[in] n: unsigned variable used by NLOPT package.
+	 * @param[in] theta: theta Vector with three parameter (Variance, Range, Smoothness)
+	 *                           that is used to to generate the Covariance Matrix.
+	 * @param[in] grad: double variable used by NLOPT package.
+	 * @param[in] data: MLE_data struct with different MLE inputs.
+	 */
 {
 
-    //Initialization
-    double value;
-    MLE_data* data      = ((MLE_data*)MORSE_data);
-    int M = data->M;                     // M is a int determined by us, which could be e.g. 5 for hourly data.
-    int T = data->T;
-    double *forcing=data->forcing;  // ? forcing is a vector loaded from a .csv file, in data (obs_dir)
-    int no_years=data->no_years;
+	//Initialization
+	double value;
+	MLE_data* data      = ((MLE_data*)MORSE_data);
+	int M = data->M;                     // M is a int determined by us, which could be e.g. 5 for hourly data.
+	int T = data->T;
+	double *forcing=data->forcing;  // ? forcing is a vector loaded from a .csv file, in data (obs_dir)
+	int no_years=data->no_years;
 
-    MORSE_desc_t *Zobs=data->descZ;     // ? Zobs is the time series at certain grid, should be in data
-    MORSE_desc_t *X=data->X;        // X is a matrix generated in this process
-    MORSE_desc_t *part1=data->descpart1;  // a vector generated in this process
-    MORSE_desc_t *part2=data->descpart2;  // a vector generated in this process
-    MORSE_desc_t *part2_vector=data->part2_vector;  // a vector generated in this process
-    MORSE_desc_t *estimated_mean_trend= data->estimated_mean_trend;  // a vector generated in this process
-    MORSE_sequence_t *msequence      = (MORSE_sequence_t *) data->sequence;
-    MORSE_request_t  *mrequest       = (MORSE_request_t *) data->request;
-    int         N       = X->m;
-    MORSE_desc_t *XtX=data->XtX;
+	MORSE_desc_t *Zobs=data->descZ;     // ? Zobs is the time series at certain grid, should be in data
+	MORSE_desc_t *X=data->X;        // X is a matrix generated in this process
+	MORSE_desc_t *part1=data->descpart1;  // a vector generated in this process
+	MORSE_desc_t *part2=data->descpart2;  // a vector generated in this process
+	MORSE_desc_t *part2_vector=data->part2_vector;  // a vector generated in this process
+	MORSE_desc_t *estimated_mean_trend= data->estimated_mean_trend;  // a vector generated in this process
+	MORSE_sequence_t *msequence      = (MORSE_sequence_t *) data->sequence;
+	MORSE_request_t  *mrequest       = (MORSE_request_t *) data->request;
+	int         N       = X->m;
+	MORSE_desc_t *XtX=data->XtX;
 
-    //generate the matrix
-    double* localtheta =  (double *) malloc((3+no_years) * sizeof(double));
-    localtheta[0]= theta[0];
-    localtheta[1]= T;
-    localtheta[2]= M;
-    fprintf(stderr, "Theta: %f\n", theta[0]);
-    for(int ii=0;ii<no_years;ii++)
-	    localtheta[3+ii]=forcing[ii];
-
-
-    MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, X, NULL,
-		    NULL, NULL, localtheta,
-		    data->dm, "trend_model",  msequence, mrequest);
+	//generate the matrix
+	double* localtheta =  (double *) malloc((3+no_years) * sizeof(double));
+	localtheta[0]= theta[0];
+	localtheta[1]= T;
+	localtheta[2]= M;
+	fprintf(stderr, "Theta: %f\n", theta[0]);
+	for(int ii=0;ii<no_years;ii++)
+		localtheta[3+ii]=forcing[ii];
 
 
-    //   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
-
-    //Calculate part2
-    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
-
-//    double *z = (double *) malloc(15 * sizeof(double));
- //   MORSE_Tile_to_Lapack( part2_vector, z, 15);
- //   print_dmatrix("testC", 15, 1, z, 1);
-  //  exit(0);
-
-    MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
-
-    int error = MORSE_dpotrf_Tile(MorseLower,XtX);
-    if(error == 0)
-	    fprintf(stderr, "\nCholesky is Okay...\n");
-    else
-    {
-	    fprintf(stderr, "\nCholesky is not Okay\n");
-	    exit(0);
-    }
-
-    //  MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
-
-    //   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
-    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
-    MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseTrans, MorseNonUnit, 1, XtX, part2_vector);
-
-    MORSE_dgemm_Tile(MorseNoTrans,MorseNoTrans,1.0, X, part2_vector,0.0, estimated_mean_trend);
-    MORSE_dgeadd_Tile(MorseNoTrans, 1, Zobs  , -1, estimated_mean_trend);
-
-    MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0, estimated_mean_trend, estimated_mean_trend, 0.0, part2);
-    data->part2 = data->part2/N;   //SIGMA^2
+	MORSE_MLE_dcmg_Tile_Async(MorseUpperLower, X, NULL,
+			NULL, NULL, localtheta,
+			data->dm, "trend_model",  msequence, mrequest);
 
 
-//    double *z = (double *) malloc(15 * sizeof(double));
- //   MORSE_Tile_to_Lapack( part2_vector, z, 15);
- //   print_dmatrix("testC", 15, 1, z, 1);
+	//   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,Zobs,Zobs,0.0,part1);
 
-    fprintf(stderr,  "data->part2: %f\n", data->part2); 
+	//Calculate part2
+	MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,X,Zobs,0.0,part2_vector);
 
-    double *estimated_mean_trend_lapack = (double *) malloc(N * sizeof(double));
-    MORSE_Tile_to_Lapack( estimated_mean_trend, estimated_mean_trend_lapack, N);
+	//    double *z = (double *) malloc(15 * sizeof(double));
+	//   MORSE_Tile_to_Lapack( part2_vector, z, 15);
+	//   print_dmatrix("testC", 15, 1, z, 1);
+	//  exit(0);
 
-    double sum =0;
-    for(int i=0;i<N;i++)
-    {
-	    estimated_mean_trend_lapack[i] /= sqrt(data->part2); //Z
-	   // sum += estimated_mean_trend_lapack[i];
-    }
+	MORSE_dgemm_Tile(MorseTrans, MorseNoTrans, 1.0, X, X, 0.0, XtX);
 
-    //fprintf(stderr, "sum_estimated_mean_trend: %e\n", sum);
-  //  exit(0);
-  //  exit(0);
-    double *part2_vector_lapack = (double *) malloc((3+(2*M)) * sizeof(double));
-    MORSE_Tile_to_Lapack( part2_vector, part2_vector_lapack, 3+(2*M));
+	int error = MORSE_dpotrf_Tile(MorseLower,XtX);
+	if(error == 0)
+		fprintf(stderr, "\nCholesky is Okay...\n");
+	else
+	{
+		fprintf(stderr, "\nCholesky is not Okay\n");
+		exit(0);
+	}
 
- //   for(int i=0;i<3+(2*M);i++)
-   // {
-//	    sum+=part2_vector_lapack[i];
-           // sum += estimated_mean_trend_lapack[i];
-  //  }
-  //
- 
-  //Create New directory if not exist
-    struct stat st = {0};
-    if (stat("./stage0_outputs", &st) == -1)
-	    mkdir("./stage0_outputs", 0700);
+	//  MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
 
-    char * nFileZ  = (char *) malloc(50 * sizeof(char));
-    snprintf(nFileZ, 50, "%s%d%s", "./stage0_outputs/", loc,".csv");
-    fprintf(stderr, "write to: %s\n", nFileZ);
-    FILE* fp = fopen(nFileZ, "w");
-    if(fp == NULL){
-	    fprintf(stderr, "File %s cannot be opened to write\n", nFileZ);
-	    exit(1);
-    }
+	//   MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0,part2_vector,part2_vector,0.0,part2);
+	MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseNoTrans, MorseNonUnit, 1, XtX, part2_vector);
+	MORSE_dtrsm_Tile(MorseLeft, MorseLower, MorseTrans, MorseNonUnit, 1, XtX, part2_vector);
 
-    fprintf(fp, "%f\n", theta[0]);
-    fprintf(fp, "%f\n", data->part2);  // Sigma^2    
-    for(int i = 0; i < 3+(2*M); i++){
-	    fprintf(fp, "%f\n", part2_vector_lapack[i]);
-    }
+	MORSE_dgemm_Tile(MorseNoTrans,MorseNoTrans,1.0, X, part2_vector,0.0, estimated_mean_trend);
+	MORSE_dgeadd_Tile(MorseNoTrans, 1, Zobs  , -1, estimated_mean_trend);
 
-    for(int i = 0; i < N; i++){
-	    fprintf(fp, "%f\n", estimated_mean_trend_lapack[i]);
-    }
-    fclose(fp);
-    //free(nFileZ);
-
-    //fprintf(stderr, "sum_part2_vector: %e\n", sum);
-
-    //    // MORSE_Tile_to_Lapack( part2_vector, z, 15);
-    //       // MORSE_Tile_to_Lapack( part2_vector, z, 15);
+	MORSE_dgemm_Tile(MorseTrans,MorseNoTrans,1.0, estimated_mean_trend, estimated_mean_trend, 0.0, part2);
+	data->part2 = data->part2/N;   //SIGMA^2
 
 
-    //   value=(-1.0)*log(data->part1-data->part2);
-    //  fprintf(stderr, "data->part1:%f, data->part2: %f,  theta[0]:%0.14f ------- lh: %0.14f\n", data->part1, data->part2, theta[0], value);
+	//    double *z = (double *) malloc(15 * sizeof(double));
+	//   MORSE_Tile_to_Lapack( part2_vector, z, 15);
+	//   print_dmatrix("testC", 15, 1, z, 1);
 
-    //  return value;
+	fprintf(stderr,  "data->part2: %f\n", data->part2); 
+
+	double *estimated_mean_trend_lapack = (double *) malloc(N * sizeof(double));
+	MORSE_Tile_to_Lapack( estimated_mean_trend, estimated_mean_trend_lapack, N);
+
+	double sum =0;
+	for(int i=0;i<N;i++)
+	{
+		estimated_mean_trend_lapack[i] /= sqrt(data->part2); //Z
+								     // sum += estimated_mean_trend_lapack[i];
+	}
+
+	//fprintf(stderr, "sum_estimated_mean_trend: %e\n", sum);
+	//  exit(0);
+	//  exit(0);
+	double *part2_vector_lapack = (double *) malloc((3+(2*M)) * sizeof(double));
+	MORSE_Tile_to_Lapack( part2_vector, part2_vector_lapack, 3+(2*M));
+
+	//   for(int i=0;i<3+(2*M);i++)
+	// {
+	//	    sum+=part2_vector_lapack[i];
+	// sum += estimated_mean_trend_lapack[i];
+	//  }
+	//
+#if defined(CHAMELEON_USE_MPI)
+	if ( MORSE_My_Mpi_Rank() == 0 )
+	{
+#endif
+		//Create New directory if not exist
+		struct stat st = {0};
+		if (stat("./stage0_outputs", &st) == -1)
+			mkdir("./stage0_outputs", 0700);
+
+		char * nFileZ  = (char *) malloc(50 * sizeof(char));
+		snprintf(nFileZ, 50, "%s%d%s", "./stage0_outputs/", loc,".csv");
+		fprintf(stderr, "write to: %s\n", nFileZ);
+		FILE* fp = fopen(nFileZ, "w");
+		if(fp == NULL){
+			fprintf(stderr, "File %s cannot be opened to write\n", nFileZ);
+			exit(1);
+		}
+
+		fprintf(fp, "%f\n", theta[0]);
+		fprintf(fp, "%f\n", data->part2);  // Sigma^2    
+		for(int i = 0; i < 3+(2*M); i++){
+			fprintf(fp, "%f\n", part2_vector_lapack[i]);
+		}
+
+		for(int i = 0; i < N; i++){
+			fprintf(fp, "%f\n", estimated_mean_trend_lapack[i]);
+		}
+		fclose(fp);
+#if defined(CHAMELEON_USE_MPI)
+	}
+#endif
+
+	//free(nFileZ);
+
+	//fprintf(stderr, "sum_part2_vector: %e\n", sum);
+
+	//    // MORSE_Tile_to_Lapack( part2_vector, z, 15);
+	//       // MORSE_Tile_to_Lapack( part2_vector, z, 15);
+
+
+	//   value=(-1.0)*log(data->part1-data->part2);
+	//  fprintf(stderr, "data->part1:%f, data->part2: %f,  theta[0]:%0.14f ------- lh: %0.14f\n", data->part1, data->part2, theta[0], value);
+
+	//  return value;
 }
 
 
@@ -843,7 +864,7 @@ double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * M
 		  MORSE_Sequence_Wait(msequence);
 		  printf("error: %e\n", (error/norm_c));
 		  exit(0);
-		  */
+		 */
 		//***************************************
 		//MORSE_Tile_to_Lapack( MORSE_descC, C, N);
 		//print_dmatrix("testC", 16, 16, C, 16);
@@ -940,7 +961,7 @@ double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * M
 			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2p, MORSE_descZ2p, 0, MORSE_descproduct2);
 			data->variance1 = (1.0/(N/2)) * data->dotp1;
 			data->variance2 = (1.0/(N/2)) * data->dotp2;
-			*/
+			 */
 		}
 		else if(strcmp(data->kernel_fun, "bivariate_matern_parsimonious_profile")   == 0)
 		{
@@ -992,7 +1013,7 @@ double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * M
 			MORSE_dgemm_Tile (MorseTrans, MorseNoTrans, 1, MORSE_descZ2p, MORSE_descZ2p, 0, MORSE_descproduct2);
 			data->variance1 = (1.0/(N/2)) * data->dotp1;
 			data->variance2 = (1.0/(N/2)) * data->dotp2;
-			*/
+			 */
 
 		}
 		else
@@ -1065,7 +1086,7 @@ double MORSE_dmle_Tile(unsigned n, const double * theta, double * grad, void * M
 		//fprintf(stderr," ---- re-store Z Vector Time: %6.2f\n", zcpy_time);
 		printf(" ---- Total Time: %6.2f\n", /*matrix_gen_time+*/ time_facto + logdet_calculate + time_solve);
 		//fprintf(stderr," ---- Gflop (ignore): %6.2f\n", flops / 1e9 );
-		printf(" ----  MLE - Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
+		printf(" ---- Gflop/s: %6.2f\n", flops / 1e9 / (time_facto  + time_solve));
 		//fprintf(stderr," ---- Peak Performance: %6.2f Gflops/s\n",  (ncores*p_grid*q_grid*16*2.3) );
 		//fprintf(stderr,"***************************************************\n");
 
@@ -2886,14 +2907,14 @@ void MORSE_dmle_Call_phase_2(MLE_data  *data, int ncores,int gpus, int dts, int 
 
 	MORSE_desc_t *D		= NULL;  // Diagonal matrix of size (2L-1) * (2L-1) 
 	MORSE_desc_t *Ep	= NULL;  // A matrix of complex exp of size (2L)*(2L-1)
-	//MORSE_desc_t *Epinv	= NULL;  // A matrix of complex exp of size (2L)*(2L-1) -- Inverse
+					 //MORSE_desc_t *Epinv	= NULL;  // A matrix of complex exp of size (2L)*(2L-1) -- Inverse
 	MORSE_desc_t *Et1	= NULL;  // 
 	MORSE_desc_t *Et2       = NULL;  //       
 	MORSE_desc_t *P		= NULL;  // Permutation matrix of size (L-1)*(L+1)
-	//MORSE_desc_t Q[L];  	 // L* Wigner matrix of size (2L-1)*(2L-1)
+					 //MORSE_desc_t Q[L];  	 // L* Wigner matrix of size (2L-1)*(2L-1)
 	MORSE_desc_t *W		= NULL;  // Wight matrix of size (2L-1) * (2L-1)
-	//MORSE_desc_t *Y		= NULL;  // Spherical hermonics matrix of size (L^2)*(L+1)
-	//MORSE_desc_t *R		= NULL;  // Reshape matrix of size (2L-1)*(L^2)
+					 //MORSE_desc_t *Y		= NULL;  // Spherical hermonics matrix of size (L^2)*(L+1)
+					 //MORSE_desc_t *R		= NULL;  // Reshape matrix of size (2L-1)*(L^2)
 	MORSE_desc_t *Ie        = NULL;  // Extension matrix for even order  (L)*(2L+1)
 	MORSE_desc_t *Io        = NULL;  // Extension matrix for odd order (L)*(2L+1)
 	MORSE_desc_t S[L];		  // 0.5(L^2+l) wigner materix  0.5(L^2+l)*L --- define as an array for 0.5(L^2+l)  vectors, each L
@@ -3011,4 +3032,4 @@ flm_real[ell^2+ell-m] = cimag(flm[ell^2+ell+m]);
 
 }
 }
-*/
+ */
