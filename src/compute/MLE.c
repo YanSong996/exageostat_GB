@@ -230,7 +230,7 @@ void exageostat_init(int *ncores, int *gpus, int *dts, int *lts)
     }
     else{
 
-        MORSE_user_tag_size(31, 26);
+        MORSE_user_tag_size(31, 21);
         MORSE_Init(*ncores, *gpus);
     }
     // MORSE_Enable(MORSE_AUTOTUNING);

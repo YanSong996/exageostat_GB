@@ -180,16 +180,16 @@ for (i = 0; i < m; i++) {
 			    A[i + j * m] = 1; 			
 		    else  if( j0==1 /* I am at the second local col*/)
 		    {
-			    A[i + j * m] = forcing[(i0/T)+191];
-//			fprintf(stderr, "\n%0.16f\n", A[i + j * m]);
-//			exit(0);
+			    A[i + j * m] = forcing[(i0/T)+238];  // 190 for 1940  -- 238 for 1988
+			//fprintf(stderr, "\n=====%0.16f\n", A[i + j * m]);
+			//exit(0);
 		    }
 		    else if(j0==2)
 		    {
 			    ty = (i0)/T;
 
-			    for(int k=0;k<ty+191;k++){
-				    for(int kk=k;kk<ty+190;kk++)
+			    for(int k=0;k<ty+238;k++){  // 190 for 1940  -- 238 for 1988
+				    for(int kk=k;kk<ty+237;kk++)  // 189 for 1940  -- 237 for 1988
 					    theta_pow *= localtheta_T_M_forcing[0];
 				   // fprintf(stderr, "%f\n", theta_pow);
 				    sum+=theta_pow*forcing[k];
